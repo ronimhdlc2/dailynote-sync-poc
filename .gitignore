@@ -1,0 +1,32 @@
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# dependencies
+node_modules/
+
+# build
+dist/
+dist-ssr/
+.vite/
+out/
+build/
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+
+# env
+.env
+.env.*
+*.local
+
+# OS / Editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
