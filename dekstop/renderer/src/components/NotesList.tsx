@@ -1,56 +1,49 @@
 // Desktop Notes List Component
 // Display all notes in chronological order (newest first)
 
-import { useState } from 'react';
-import { BookOpen, Plus, Edit3, Trash2, Clock, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
-import type { Note } from 'shared/models/note';
+import {
+  BookOpen,
+  Plus,
+  Edit3,
+  Trash2,
+  Clock,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  ArrowLeft,
+} from "lucide-react";
+import type { Note } from "shared/models/note";
 
 interface NotesListProps {
+  notes: Note[];
   onCreateNote: () => void;
   onEditNote?: (note: Note) => void;
+  onDeleteNote?: (noteId: string) => void;
+  onBack?: () => void;
 }
 
-export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) {
-  // TODO: Replace with actual storage later
-  const [notes, setNotes] = useState<Note[]>([
-    // Mock data for now
-    {
-      id: '2026-01-30 14:30:15',
-      title: '2026-01-30 14:30:15',
-      content: 'This is my first note. **Bold text** and *italic* works!\n\n- List item 1\n- List item 2',
-      createdAt: '2026-01-30T14:30:15Z',
-      updatedAt: '2026-01-30T14:35:22Z',
-      isSynced: true
-    },
-    {
-      id: '2026-01-30 10:15:30',
-      title: 'Morning Journal',
-      content: 'Had a great morning! Exercised for 30 minutes and had a healthy breakfast.',
-      createdAt: '2026-01-30T10:15:30Z',
-      updatedAt: '2026-01-30T10:20:10Z',
-      isSynced: false
-    },
-    {
-      id: '2026-01-29 20:45:00',
-      title: 'Evening Thoughts',
-      content: 'Reflecting on the day. Need to focus more on deep work tomorrow.',
-      createdAt: '2026-01-29T20:45:00Z',
-      updatedAt: '2026-01-29T20:50:33Z',
-      isSynced: true
-    }
-  ]);
-
+export default function NotesList({
+  notes,
+  onCreateNote,
+  onEditNote,
+  onDeleteNote,
+  onBack,
+}: NotesListProps) {
+  
   const handleDeleteNote = (noteId: string) => {
-    const note = notes.find(n => n.id === noteId);
+    const note = notes.find((n) => n.id === noteId);
     if (confirm(`Are you sure you want to delete "${note?.title}"?`)) {
-      setNotes(notes.filter(n => n.id !== noteId));
-      alert('Note has been deleted');
+      if (onDeleteNote) {
+        onDeleteNote(noteId);
+      }
     }
   };
 
   const handleEditNote = (note: Note) => {
     // TODO: Implement edit mode
-    alert(`Editing note: ${note.id}\n\nThis will be implemented when we add edit mode to the editor.`);
+    // alert(
+    //   `Editing note: ${note.id}\n\nThis will be implemented when we add edit mode to the editor.`
+    // );
     if (onEditNote) {
       onEditNote(note);
     }
@@ -63,15 +56,15 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+      return `Today, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
     } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+      return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
     }
   };
@@ -79,10 +72,10 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
   const getPreview = (content: string) => {
     // Remove markdown and get first 150 characters
     const plain = content
-      .replace(/[*_~`#]/g, '')
-      .replace(/\n+/g, ' ')
+      .replace(/[*_~`#]/g, "")
+      .replace(/\n+/g, " ")
       .trim();
-    return plain.length > 150 ? plain.substring(0, 150) + '...' : plain;
+    return plain.length > 150 ? plain.substring(0, 150) + "..." : plain;
   };
 
   return (
@@ -91,6 +84,15 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
       <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+             {onBack && (
+              <button 
+                onClick={onBack}
+                className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
+                title="Back to Landing"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
             <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/30">
               <BookOpen className="w-5 h-5 text-white" />
             </div>
@@ -99,14 +101,14 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
               <span className="text-sm text-gray-500 ml-2">Your Notes</span>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="px-4 py-2 bg-blue-100 rounded-lg">
               <span className="text-sm font-semibold text-blue-700">
-                {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+                {notes.length} {notes.length === 1 ? "note" : "notes"}
               </span>
             </div>
-            
+
             <button
               onClick={onCreateNote}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl transition-all"
@@ -157,22 +159,28 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
                         <span>{formatDate(note.updatedAt)}</span>
                       </div>
                     </div>
-                    
+
                     {/* Sync Status Badge */}
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-                      note.isSynced 
-                        ? 'bg-green-50 border border-green-200' 
-                        : 'bg-orange-50 border border-orange-200'
-                    }`}>
+                    <div
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                        note.isSynced
+                          ? "bg-green-50 border border-green-200"
+                          : "bg-orange-50 border border-orange-200"
+                      }`}
+                    >
                       {note.isSynced ? (
                         <>
                           <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          <span className="text-xs text-green-700 font-medium">Synced</span>
+                          <span className="text-xs text-green-700 font-medium">
+                            Synced
+                          </span>
                         </>
                       ) : (
                         <>
                           <AlertCircle className="w-4 h-4 text-orange-600" />
-                          <span className="text-xs text-orange-700 font-medium">Local only</span>
+                          <span className="text-xs text-orange-700 font-medium">
+                            Local only
+                          </span>
                         </>
                       )}
                     </div>
@@ -192,7 +200,7 @@ export default function NotesList({ onCreateNote, onEditNote }: NotesListProps) 
                       <Edit3 className="w-4 h-4" />
                       Edit Note
                     </button>
-                    
+
                     <button
                       onClick={() => handleDeleteNote(note.id)}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-sm font-semibold text-red-600 transition-colors"

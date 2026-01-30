@@ -7,9 +7,21 @@ import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename } from 
 import type { Note } from 'shared/models/note';
 import { BookOpen, Save, X, Edit3, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function NoteEditor() {
-  const [note, setNote] = useState<Note>(() => createNote());
+// NoteEditor.tsx props interface
+interface NoteEditorProps {
+  note?: Note | null;           // Existing note untuk edit
+  onSave?: (note: Note) => void;          // Callback setelah save
+  onCancel?: () => void;        // Callback setelah cancel
+}
+
+export default function NoteEditor({ note: initialNote, onSave, onCancel }: NoteEditorProps) {
+  const [note, setNote] = useState<Note>(() => initialNote || createNote());
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+
+  // Update internal state when prop changes (optional, but good for switching notes)
+  // useEffect(() => {
+  //   if (initialNote) setNote(initialNote);
+  // }, [initialNote]);
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const updated = updateNoteContent(note, e.target.value);
@@ -32,19 +44,21 @@ export default function NoteEditor() {
       note: note
     });
 
-    alert(
-      `✅ Saved!\n\nNote: "${note.title}"\nFilename: ${getNoteFilename(note)}\n\nNext: We'll add Google Drive sync!`
-    );
-
-    // Reset to new note
-    setNote(createNote());
+    // In a real app, we would save to disk/db here
+    
+    if (onSave) {
+        onSave(note);
+    }
   };
 
   const handleCancel = () => {
-    if (note.content.trim() && !confirm('Discard changes?')) {
+    if (note.content.trim() && note.content !== (initialNote?.content || '') && !confirm('Discard changes?')) {
       return;
     }
-    setNote(createNote());
+    
+    if (onCancel) {
+        onCancel();
+    }
   };
 
   return (
