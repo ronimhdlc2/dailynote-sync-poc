@@ -12,11 +12,32 @@ import { BookOpen, Save, X, Edit3, Clock, CheckCircle2, AlertCircle } from 'luci
 // ✨ Import shared business logic
 import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename } from 'shared/core/note-engine';
 import { Note } from 'shared/models/note';
+import { NoteStorage } from '../services/storage';
+import { useLocalSearchParams } from 'expo-router';
 
 export default function AddNote() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [note, setNote] = useState<Note>(() => createNote());
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!id);
   const router = useRouter();
+
+  // Load existing note if id is present
+  React.useEffect(() => {
+    if (id) {
+      const loadNote = async () => {
+        const existing = await NoteStorage.getNote(id);
+        if (existing) {
+          setNote(existing);
+        } else {
+          Alert.alert('Error', 'Note not found');
+          router.back();
+        }
+        setIsLoading(false);
+      };
+      loadNote();
+    }
+  }, [id]);
 
   const handleContentChange = (text: string) => {
     const updated = updateNoteContent(note, text);
@@ -28,56 +49,60 @@ export default function AddNote() {
     setNote(updated);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!note.content.trim()) {
       Alert.alert('Error', 'Please write something before saving!');
       return;
     }
 
-    console.log('📝 Saving note:', {
-      filename: getNoteFilename(note),
-      note: note
-    });
-
-    Alert.alert(
-      'Saved! 🎉',
-      `Note "${note.title}" saved locally.\n\nFilename: ${getNoteFilename(note)}\n\nNext: We'll add Google Drive sync!`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setNote(createNote());
-            router.back();
-          }
-        }
-      ]
-    );
+    try {
+      await NoteStorage.saveNote(note);
+      
+      // Optional: Show brief success feedback or just go back
+      // Alert.alert('Saved', 'Note saved successfully', [{ text: 'OK', onPress: () => router.back() }]);
+      router.back(); 
+      
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save note');
+      console.error(error);
+    }
   };
 
   const handleCancel = () => {
-    if (!note.content.trim()) {
-      router.back();
+    // If it's a new note and has content, ask confirm
+    // If it's an existing note and has changed? (Implementation simplifiction: check vs initial state would be better, but for now just check content)
+    // For simplicity, if content exists and user cancels, confirm.
+    
+    if (note.content.trim() && !id) { // Only confirm for new notes or check dirty logic properly
+       Alert.alert(
+        'Discard changes?',
+        'Are you sure you want to discard this note?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => router.back()
+          }
+        ]
+      );
       return;
     }
-    
-    Alert.alert(
-      'Discard changes?',
-      'Are you sure you want to discard this note?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => router.back()
-        }
-      ]
-    );
+    router.back();
   };
 
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-50">
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
-    <View className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
+    <View className="flex-1 bg-slate-50">
       {/* Header */}
-      <View className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
+      <View className="border-b border-gray-200 bg-white">
         <View className="px-6 py-4 pt-12 flex-row items-center justify-between">
           <View className="flex-row items-center gap-3">
             <LinearGradient
@@ -90,7 +115,7 @@ export default function AddNote() {
             </LinearGradient>
             <View>
               <Text className="text-xl font-bold text-gray-900">DailyNote</Text>
-              <Text className="text-sm text-gray-500">Editor</Text>
+              <Text className="text-sm text-gray-500">{id ? 'Edit Note' : 'New Note'}</Text>
             </View>
           </View>
           
@@ -196,7 +221,7 @@ Write freely and let your thoughts flow...`}
       </ScrollView>
 
       {/* Action Bar */}
-      <View className="border-t border-gray-200 bg-white/80 backdrop-blur-sm">
+      <View className="border-t border-gray-200 bg-white">
         <View className="px-6 py-4">
           {/* Filename info */}
           <View className="flex-row items-center gap-2 mb-4">

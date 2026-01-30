@@ -1,3 +1,6 @@
+// mobile/app/index.tsx
+// Landing Page dengan navigation ke notes dan add-note
+
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,15 +50,27 @@ export default function RootHome() {
             Akses catatan Anda dari desktop atau mobile, kapan saja.
           </Text>
 
-          <TouchableOpacity
-            className="flex-row items-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
-            onPress={() => router.push('/add-note')}
-          >
-            <BookOpen color="white" size={20} />
-            <Text className="text-lg font-semibold text-white">
-              Mulai Menulis Sekarang
-            </Text>
-          </TouchableOpacity>
+          {/* CTA Buttons */}
+          <View className="gap-3 w-full px-4">
+            <TouchableOpacity
+              className="flex-row items-center justify-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
+              onPress={() => router.push('/note-editor')}
+            >
+              <BookOpen color="white" size={20} />
+              <Text className="text-lg font-semibold text-white">
+                Mulai Menulis Sekarang
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="flex-row items-center justify-center gap-2 bg-white border-2 border-blue-600 px-8 py-4 rounded-xl active:opacity-80"
+              onPress={() => router.push('/note-list')}
+            >
+              <Text className="text-lg font-semibold text-blue-600">
+                Lihat Catatan Saya
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Preview Card */}
@@ -241,7 +256,7 @@ export default function RootHome() {
           </Text>
           <TouchableOpacity
             className="flex-row items-center gap-2 bg-white px-8 py-4 rounded-xl shadow-xl active:opacity-80"
-            onPress={() => router.push('/add-note')}
+            onPress={() => router.push('/note-editor')}
           >
             <BookOpen color="#2563eb" size={20} />
             <Text className="text-lg font-semibold text-blue-600">

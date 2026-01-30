@@ -12,37 +12,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BookOpen, Plus, Edit3, Trash2, Clock, FileText } from 'lucide-react-native';
 import type { Note } from 'shared/models/note';
 
+import { NoteStorage } from '../services/storage';
+import { useFocusEffect } from 'expo-router';
+
 export default function NotesScreen() {
   const router = useRouter();
+  const [notes, setNotes] = useState<Note[]>([]);
   
-  // TODO: Replace with actual storage later
-  const [notes, setNotes] = useState<Note[]>([
-    // Mock data for now
-    {
-      id: '2026-01-30 14:30:15',
-      title: '2026-01-30 14:30:15',
-      content: 'This is my first note. **Bold text** and *italic* works!\n\n- List item 1\n- List item 2',
-      createdAt: '2026-01-30T14:30:15Z',
-      updatedAt: '2026-01-30T14:35:22Z',
-      isSynced: true
-    },
-    {
-      id: '2026-01-30 10:15:30',
-      title: 'Morning Journal',
-      content: 'Had a great morning! Exercised for 30 minutes and had a healthy breakfast.',
-      createdAt: '2026-01-30T10:15:30Z',
-      updatedAt: '2026-01-30T10:20:10Z',
-      isSynced: false
-    },
-    {
-      id: '2026-01-29 20:45:00',
-      title: 'Evening Thoughts',
-      content: 'Reflecting on the day. Need to focus more on deep work tomorrow.',
-      createdAt: '2026-01-29T20:45:00Z',
-      updatedAt: '2026-01-29T20:50:33Z',
-      isSynced: true
-    }
-  ]);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadNotes();
+    }, [])
+  );
+
+  const loadNotes = async () => {
+    const loaded = await NoteStorage.getNotes();
+    setNotes(loaded);
+  };
 
   const handleDeleteNote = (noteId: string) => {
     const note = notes.find(n => n.id === noteId);
@@ -54,8 +40,9 @@ export default function NotesScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setNotes(notes.filter(n => n.id !== noteId));
+          onPress: async () => {
+            await NoteStorage.deleteNote(noteId);
+            loadNotes();
             Alert.alert('Deleted', 'Note has been deleted');
           }
         }
@@ -64,8 +51,7 @@ export default function NotesScreen() {
   };
 
   const handleEditNote = (noteId: string) => {
-    // TODO: Navigate to editor with note data
-    Alert.alert('Edit Note', `Editing note: ${noteId}\n\nThis will be implemented when we add edit mode to the editor.`);
+    router.push({ pathname: '/note-editor', params: { id: noteId } });
   };
 
   const formatDate = (isoString: string) => {
@@ -140,7 +126,7 @@ export default function NotesScreen() {
           </Text>
           <TouchableOpacity
             className="flex-row items-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
-            onPress={() => router.push('/add-note')}
+            onPress={() => router.push('/note-editor')}
           >
             <Plus color="white" size={20} />
             <Text className="text-lg font-semibold text-white">Create First Note</Text>
@@ -212,7 +198,7 @@ export default function NotesScreen() {
         <View className="absolute bottom-6 right-6">
           <TouchableOpacity
             className="bg-blue-600 w-16 h-16 rounded-full items-center justify-center shadow-2xl active:opacity-80"
-            onPress={() => router.push('/add-note')}
+            onPress={() => router.push('/note-editor')}
           >
             <Plus color="white" size={28} />
           </TouchableOpacity>
