@@ -2,13 +2,15 @@ import { useState } from "react";
 import LandingPage from "./components/LandingPage";
 import NotesList from "./components/NotesList";
 import NoteEditor from "./components/NoteEditor";
+import NoteViewer from "./components/NoteViewer";
 import type { Note } from "shared/models/note";
 import { getNotesSorted, deleteNote } from "shared/core/note-engine";
 
-type View = "landing" | "notes" | "editor";
+type View = "landing" | "notes" | "viewer" | "editor";
 
 function App() {
   const [currentView, setCurrentView] = useState<View>("landing");
+  const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
 
   // Load notes from localStorage
@@ -35,13 +37,13 @@ function App() {
   };
 
   const handleEditNote = (note: Note) => {
-    setEditingNote(note);
-    setCurrentView("editor");
+    handleViewNote(note);
   };
 
   const handleSaveNote = (note: Note) => {
     const existingIndex = notes.findIndex((n) => n.id === note.id);
     let updatedNotes;
+    const isEditingExisting = existingIndex >= 0;
 
     if (existingIndex >= 0) {
       // Update existing
@@ -56,7 +58,13 @@ function App() {
     // Sort notes ensures the most recently updated note is at the top
     saveNotesToStorage(getNotesSorted(updatedNotes));
     setEditingNote(null);
-    setCurrentView("notes");
+
+    if (isEditingExisting) {
+      setViewingNote(note);
+      setCurrentView("viewer");
+    } else {
+      setCurrentView("notes");
+    }
   };
 
   const handleDeleteNote = (noteId: string) => {
@@ -102,6 +110,24 @@ function App() {
     }
   };
 
+  const handleViewNote = (note: Note) => {
+    setViewingNote(note);
+    setCurrentView("viewer");
+  };
+
+  const handleEditFromViewer = () => {
+    if (viewingNote) {
+      setEditingNote(viewingNote);
+      setViewingNote(null);
+      setCurrentView("editor");
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setViewingNote(null);
+    setCurrentView("notes");
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header - Only show on landing view */}
@@ -131,6 +157,14 @@ function App() {
             onEditNote={handleEditNote}
             onDeleteNote={handleDeleteNote}
             onBack={handleBackToLanding}
+          />
+        )}
+
+        {currentView === "viewer" && viewingNote && (
+          <NoteViewer
+            note={viewingNote}
+            onClose={handleCloseViewer}
+            onEdit={handleEditFromViewer}
           />
         )}
 

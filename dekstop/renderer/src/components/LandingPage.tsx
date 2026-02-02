@@ -46,7 +46,7 @@ export default function LandingPage({ onCreateNote, onViewNotes }: LandingPagePr
           <div className="flex flex-wrap items-center justify-center gap-4">
             <button
               onClick={onCreateNote}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 transition-all"
+              className="cursor-pointer inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all"
             >
               <BookOpen className="w-5 h-5" />
               Mulai Menulis Sekarang
@@ -55,7 +55,7 @@ export default function LandingPage({ onCreateNote, onViewNotes }: LandingPagePr
             {onViewNotes && (
               <button
                 onClick={onViewNotes}
-                className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 border-2 border-blue-600 px-8 py-3.5 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                className="cursor-pointer inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 border-2 border-blue-600 px-8 py-3.5 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all"
               >
                 Lihat Catatan Saya
               </button>

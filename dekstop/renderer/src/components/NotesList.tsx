@@ -4,16 +4,20 @@
 import {
   BookOpen,
   Plus,
-  Edit3,
   Trash2,
   Clock,
   FileText,
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
+  Eye,
 } from "lucide-react";
 import type { Note } from "shared/models/note";
-import { getNotePreview, formatNoteDate, getNoteById } from "shared/core/note-engine";
+import {
+  getNotePreview,
+  formatNoteDate,
+  getNoteById,
+} from "shared/core/note-engine";
 
 interface NotesListProps {
   notes: Note[];
@@ -30,7 +34,6 @@ export default function NotesList({
   onDeleteNote,
   onBack,
 }: NotesListProps) {
-  
   const handleDeleteNote = (noteId: string) => {
     // Use shared logic for finding logic consistency
     const note = getNoteById(notes, noteId);
@@ -53,8 +56,8 @@ export default function NotesList({
       <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             {onBack && (
-              <button 
+            {onBack && (
+              <button
                 onClick={onBack}
                 className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
                 title="Back to Landing"
@@ -163,11 +166,12 @@ export default function NotesList({
                   {/* Action Buttons */}
                   <div className="flex gap-3 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => handleEditNote(note)}
+                      onClick={() => handleEditNote(note)} // Ini akan trigger handleViewNote di App.tsx
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg text-sm font-semibold text-blue-600 transition-colors"
                     >
-                      <Edit3 className="w-4 h-4" />
-                      Edit Note
+                      <Eye className="w-4 h-4" />
+                      View Note{" "}
+                      {/* Ubah text dari "Edit Note" ke "View Note" */}
                     </button>
 
                     <button
