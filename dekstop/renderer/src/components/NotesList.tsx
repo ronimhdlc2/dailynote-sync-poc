@@ -13,6 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import type { Note } from "shared/models/note";
+import { getNotePreview, formatNoteDate, getNoteById } from "shared/core/note-engine";
 
 interface NotesListProps {
   notes: Note[];
@@ -31,8 +32,9 @@ export default function NotesList({
 }: NotesListProps) {
   
   const handleDeleteNote = (noteId: string) => {
-    const note = notes.find((n) => n.id === noteId);
-    if (confirm(`Are you sure you want to delete "${note?.title}"?`)) {
+    // Use shared logic for finding logic consistency
+    const note = getNoteById(notes, noteId);
+    if (note && confirm(`Are you sure you want to delete "${note.title}"?`)) {
       if (onDeleteNote) {
         onDeleteNote(noteId);
       }
@@ -40,42 +42,9 @@ export default function NotesList({
   };
 
   const handleEditNote = (note: Note) => {
-    // TODO: Implement edit mode
-    // alert(
-    //   `Editing note: ${note.id}\n\nThis will be implemented when we add edit mode to the editor.`
-    // );
     if (onEditNote) {
       onEditNote(note);
     }
-  };
-
-  const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-    } else {
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-  };
-
-  const getPreview = (content: string) => {
-    // Remove markdown and get first 150 characters
-    const plain = content
-      .replace(/[*_~`#]/g, "")
-      .replace(/\n+/g, " ")
-      .trim();
-    return plain.length > 150 ? plain.substring(0, 150) + "..." : plain;
   };
 
   return (
@@ -156,7 +125,7 @@ export default function NotesList({
                       </h3>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Clock className="w-4 h-4" />
-                        <span>{formatDate(note.updatedAt)}</span>
+                        <span>{formatNoteDate(note.updatedAt)}</span>
                       </div>
                     </div>
 
@@ -188,7 +157,7 @@ export default function NotesList({
 
                   {/* Note Preview */}
                   <p className="text-sm text-gray-600 leading-relaxed mb-4 border-l-2 border-gray-200 pl-4">
-                    {getPreview(note.content)}
+                    {getNotePreview(note)}
                   </p>
 
                   {/* Action Buttons */}

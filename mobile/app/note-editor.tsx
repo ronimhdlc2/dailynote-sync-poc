@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BookOpen, Save, X, Edit3, Clock, CheckCircle2, AlertCircle } from 'lucide-react-native';
 
 // ✨ Import shared business logic
-import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename } from 'shared/core/note-engine';
+import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename, validateNote } from 'shared/core/note-engine';
 import { Note } from 'shared/models/note';
 import { NoteStorage } from '../services/storage';
 import { useLocalSearchParams } from 'expo-router';
@@ -50,8 +50,9 @@ export default function AddNote() {
   };
 
   const handleSave = async () => {
-    if (!note.content.trim()) {
-      Alert.alert('Error', 'Please write something before saving!');
+    const validation = validateNote(note);
+    if (!validation.valid) {
+      Alert.alert('Validation Error', validation.error);
       return;
     }
 

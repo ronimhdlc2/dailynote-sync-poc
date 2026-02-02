@@ -2,26 +2,39 @@
 // Uses SAME shared logic as mobile app!
 // Redesigned to match landing page theme
 
-import { useState } from 'react';
-import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename } from 'shared/core/note-engine';
-import type { Note } from 'shared/models/note';
-import { BookOpen, Save, X, Edit3, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState } from "react";
+import {
+  createNote,
+  updateNoteContent,
+  updateNoteTitle,
+  getNoteFilename,
+  validateNote,
+} from "shared/core/note-engine";
+import type { Note } from "shared/models/note";
+import {
+  BookOpen,
+  Save,
+  X,
+  Edit3,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 // NoteEditor.tsx props interface
 interface NoteEditorProps {
-  note?: Note | null;           // Existing note untuk edit
-  onSave?: (note: Note) => void;          // Callback setelah save
-  onCancel?: () => void;        // Callback setelah cancel
+  note?: Note | null; // Existing note untuk edit
+  onSave?: (note: Note) => void; // Callback setelah save
+  onCancel?: () => void; // Callback setelah cancel
 }
 
-export default function NoteEditor({ note: initialNote, onSave, onCancel }: NoteEditorProps) {
+export default function NoteEditor({
+  note: initialNote,
+  onSave,
+  onCancel,
+}: NoteEditorProps) {
   const [note, setNote] = useState<Note>(() => initialNote || createNote());
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-
-  // Update internal state when prop changes (optional, but good for switching notes)
-  // useEffect(() => {
-  //   if (initialNote) setNote(initialNote);
-  // }, [initialNote]);
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const updated = updateNoteContent(note, e.target.value);
@@ -34,32 +47,43 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
   };
 
   const handleSave = () => {
-    if (!note.content.trim()) {
-      alert('Please write something before saving!');
+    const validation = validateNote(note);
+    if (!validation.valid) {
+      alert(validation.error);
       return;
     }
 
-    console.log('💾 Saving note:', {
+    console.log("💾 Saving note:", {
       filename: getNoteFilename(note),
-      note: note
+      note: note,
     });
 
     // In a real app, we would save to disk/db here
-    
+    // Add success feedback
+    alert(`✅ Note saved successfully!\n\nFilename: ${getNoteFilename(note)}`);
+
     if (onSave) {
-        onSave(note);
+      onSave(note);
     }
   };
 
   const handleCancel = () => {
-    if (note.content.trim() && note.content !== (initialNote?.content || '') && !confirm('Discard changes?')) {
+    if (
+      note.content.trim() &&
+      note.content !== (initialNote?.content || "") &&
+      !confirm("Discard changes?")
+    ) {
       return;
     }
-    
+
     if (onCancel) {
-        onCancel();
+      onCancel();
     }
   };
+
+  const hasChanges = 
+  note.content !== (initialNote?.content || '') ||
+  note.title !== (initialNote?.title || note.title);
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
@@ -75,7 +99,7 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
               <span className="text-sm text-gray-500 ml-2">Editor</span>
             </div>
           </div>
-          
+
           {/* Metadata badges */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg">
@@ -84,20 +108,26 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
                 {new Date(note.createdAt).toLocaleTimeString()}
               </span>
             </div>
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-              note.isSynced 
-                ? 'bg-green-50 border border-green-200' 
-                : 'bg-orange-50 border border-orange-200'
-            }`}>
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                note.isSynced
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-orange-50 border border-orange-200"
+              }`}
+            >
               {note.isSynced ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <span className="text-xs text-green-700 font-medium">Synced</span>
+                  <span className="text-xs text-green-700 font-medium">
+                    Synced
+                  </span>
                 </>
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 text-orange-600" />
-                  <span className="text-xs text-orange-700 font-medium">Not synced</span>
+                  <span className="text-xs text-orange-700 font-medium">
+                    Not synced
+                  </span>
                 </>
               )}
             </div>
@@ -123,7 +153,7 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
               <Edit3 className="absolute right-2 top-3 w-5 h-5 text-blue-500" />
             </div>
           ) : (
-            <div 
+            <div
               className="flex items-center gap-3 cursor-pointer group"
               onClick={() => setIsEditingTitle(true)}
             >
@@ -134,7 +164,8 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
             </div>
           )}
           <p className="text-sm text-gray-500 mt-2">
-            Click title to edit • ID: <span className="font-mono text-xs">{note.id}</span>
+            Click title to edit • ID:{" "}
+            <span className="font-mono text-xs">{note.id}</span>
           </p>
         </div>
 
@@ -143,13 +174,15 @@ export default function NoteEditor({ note: initialNote, onSave, onCancel }: Note
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-gray-500" />
-              <span className="text-sm font-semibold text-gray-700">Your Daily Note</span>
+              <span className="text-sm font-semibold text-gray-700">
+                Your Daily Note
+              </span>
             </div>
             <span className="text-xs text-gray-500">
               {note.content.length} characters
             </span>
           </div>
-          
+
           <textarea
             className="flex-1 w-full border-none outline-none text-base leading-relaxed text-gray-800 resize-none font-sans placeholder:text-gray-400"
             placeholder="Start writing your thoughts here...
@@ -177,20 +210,20 @@ Write freely and let your thoughts flow..."
               {getNoteFilename(note)}
             </span>
           </div>
-          
+
           {/* Right side - Actions */}
           <div className="flex gap-3">
-            <button 
+            <button
               onClick={handleCancel}
               className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
             >
               <X className="w-4 h-4" />
               Cancel
             </button>
-            
-            <button 
+
+            <button
               onClick={handleSave}
-              disabled={!note.content.trim()}
+              disabled={!note.content.trim() || !hasChanges}
               className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 border-none rounded-xl text-sm text-white font-bold hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/30 transition-all disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <Save className="w-4 h-4" />
