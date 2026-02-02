@@ -8,6 +8,7 @@ import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert } from 'reac
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BookOpen, Save, X, Edit3, Clock, CheckCircle2, AlertCircle } from 'lucide-react-native';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // ✨ Import shared business logic
 import { createNote, updateNoteContent, updateNoteTitle, getNoteFilename, validateNote } from 'shared/core/note-engine';
@@ -101,6 +102,7 @@ export default function AddNote() {
   }
 
   return (
+    <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
     <View className="flex-1 bg-slate-50">
       {/* Header */}
       <View className="border-b border-gray-200 bg-white">
@@ -258,5 +260,6 @@ Write freely and let your thoughts flow...`}
         </View>
       </View>
     </View>
+    </SafeAreaView>
   );
 }

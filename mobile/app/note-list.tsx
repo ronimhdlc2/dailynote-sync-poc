@@ -5,24 +5,32 @@
  * Display all notes in chronological order (newest first)
  */
 
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BookOpen, Plus, Edit3, Trash2, Clock, FileText } from 'lucide-react-native';
-import type { Note } from 'shared/models/note';
+import React, { useState } from "react";
+import { View, Text, ScrollView, TouchableOpacity, Alert } from "react-native";
+import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  BookOpen,
+  Plus,
+  Trash2,
+  Clock,
+  FileText,
+  Eye,
+} from "lucide-react-native";
+import type { Note } from "shared/models/note";
 
-import { NoteStorage } from '../services/storage';
-import { useFocusEffect } from 'expo-router';
+import { NoteStorage } from "../services/storage";
+import { useFocusEffect } from "expo-router";
 
 export default function NotesScreen() {
   const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
-  
+
   useFocusEffect(
     React.useCallback(() => {
       loadNotes();
-    }, [])
+    }, []),
   );
 
   const loadNotes = async () => {
@@ -31,27 +39,23 @@ export default function NotesScreen() {
   };
 
   const handleDeleteNote = (noteId: string) => {
-    const note = notes.find(n => n.id === noteId);
+    const note = notes.find((n) => n.id === noteId);
     Alert.alert(
-      'Delete Note',
+      "Delete Note",
       `Are you sure you want to delete "${note?.title}"?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             await NoteStorage.deleteNote(noteId);
             loadNotes();
-            Alert.alert('Deleted', 'Note has been deleted');
-          }
-        }
-      ]
+            Alert.alert("Deleted", "Note has been deleted");
+          },
+        },
+      ],
     );
-  };
-
-  const handleEditNote = (noteId: string) => {
-    router.push({ pathname: '/note-editor', params: { id: noteId } });
   };
 
   const formatDate = (isoString: string) => {
@@ -61,15 +65,15 @@ export default function NotesScreen() {
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+      return `Today, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
     } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+      return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
     }
   };
@@ -77,13 +81,14 @@ export default function NotesScreen() {
   const getPreview = (content: string) => {
     // Remove markdown and get first 100 characters
     const plain = content
-      .replace(/[*_~`#]/g, '')
-      .replace(/\n+/g, ' ')
+      .replace(/[*_~`#]/g, "")
+      .replace(/\n+/g, " ")
       .trim();
-    return plain.length > 100 ? plain.substring(0, 100) + '...' : plain;
+    return plain.length > 100 ? plain.substring(0, 100) + "..." : plain;
   };
 
   return (
+    <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
     <View className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
       {/* Header */}
       <View className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
@@ -91,7 +96,7 @@ export default function NotesScreen() {
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center gap-3">
               <LinearGradient
-                colors={['#2563eb', '#1d4ed8']}
+                colors={["#2563eb", "#1d4ed8"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 className="w-10 h-10 rounded-xl items-center justify-center shadow-lg"
@@ -99,14 +104,16 @@ export default function NotesScreen() {
                 <BookOpen color="white" size={20} />
               </LinearGradient>
               <View>
-                <Text className="text-xl font-bold text-gray-900">DailyNote</Text>
+                <Text className="text-xl font-bold text-gray-900">
+                  DailyNote
+                </Text>
                 <Text className="text-sm text-gray-500">Your Notes</Text>
               </View>
             </View>
-            
+
             <View className="px-3 py-1.5 bg-blue-100 rounded-lg">
               <Text className="text-sm font-semibold text-blue-700">
-                {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+                {notes.length} {notes.length === 1 ? "note" : "notes"}
               </Text>
             </View>
           </View>
@@ -126,18 +133,22 @@ export default function NotesScreen() {
           </Text>
           <TouchableOpacity
             className="flex-row items-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
-            onPress={() => router.push('/note-editor')}
+            onPress={() => router.push("/note-editor")}
           >
             <Plus color="white" size={20} />
-            <Text className="text-lg font-semibold text-white">Create First Note</Text>
+            <Text className="text-lg font-semibold text-white">
+              Create First Note
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView className="flex-1 px-6 py-4">
           {notes.map((note) => (
-            <View
+            <TouchableOpacity // ✅ Ubah View jadi TouchableOpacity
               key={note.id}
               className="bg-white rounded-xl shadow-lg border border-gray-200 p-5 mb-4"
+              onPress={() => router.push(`/note-viewer?id=${note.id}`)} // ✅ Klik card = view note
+              activeOpacity={0.7}
             >
               {/* Note Header */}
               <View className="flex-row items-start justify-between mb-3">
@@ -152,15 +163,19 @@ export default function NotesScreen() {
                     </Text>
                   </View>
                 </View>
-                
+
                 {/* Sync Status Badge */}
-                <View className={`px-2 py-1 rounded-md ${
-                  note.isSynced ? 'bg-green-100' : 'bg-orange-100'
-                }`}>
-                  <Text className={`text-xs font-medium ${
-                    note.isSynced ? 'text-green-700' : 'text-orange-700'
-                  }`}>
-                    {note.isSynced ? '✓ Synced' : '⏳ Local'}
+                <View
+                  className={`px-2 py-1 rounded-md ${
+                    note.isSynced ? "bg-green-100" : "bg-orange-100"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-medium ${
+                      note.isSynced ? "text-green-700" : "text-orange-700"
+                    }`}
+                  >
+                    {note.isSynced ? "✓ Synced" : "⏳ Local"}
                   </Text>
                 </View>
               </View>
@@ -174,21 +189,34 @@ export default function NotesScreen() {
               <View className="flex-row gap-3">
                 <TouchableOpacity
                   className="flex-1 flex-row items-center justify-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg active:opacity-70"
-                  onPress={() => handleEditNote(note.id)}
+                  onPress={(e) => {
+                    // ✅ Tambahkan stopPropagation
+                    e.stopPropagation();
+                    router.push(`/note-viewer?id=${note.id}`); // ✅ View dulu
+                  }}
                 >
-                  <Edit3 color="#2563eb" size={16} />
-                  <Text className="text-sm font-semibold text-blue-600">Edit</Text>
+                  <Eye color="#2563eb" size={16} />
+                  <Text className="text-sm font-semibold text-blue-600">
+                    View
+                  </Text>
+                  {/* ✅ Ubah text */}
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   className="flex-1 flex-row items-center justify-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg active:opacity-70"
-                  onPress={() => handleDeleteNote(note.id)}
+                  onPress={(e) => {
+                    // ✅ Tambahkan stopPropagation
+                    e.stopPropagation();
+                    handleDeleteNote(note.id);
+                  }}
                 >
                   <Trash2 color="#dc2626" size={16} />
-                  <Text className="text-sm font-semibold text-red-600">Delete</Text>
+                  <Text className="text-sm font-semibold text-red-600">
+                    Delete
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity> // ✅ Tutup TouchableOpacity
           ))}
         </ScrollView>
       )}
@@ -198,12 +226,13 @@ export default function NotesScreen() {
         <View className="absolute bottom-6 right-6">
           <TouchableOpacity
             className="bg-blue-600 w-16 h-16 rounded-full items-center justify-center shadow-2xl active:opacity-80"
-            onPress={() => router.push('/note-editor')}
+            onPress={() => router.push("/note-editor")}
           >
             <Plus color="white" size={28} />
           </TouchableOpacity>
         </View>
       )}
     </View>
+    </SafeAreaView>
   );
 }
