@@ -5,6 +5,7 @@ import NoteEditor from "./components/NoteEditor";
 import NoteViewer from "./components/NoteViewer";
 import type { Note } from "shared/models/note";
 import { getNotesSorted, deleteNote } from "shared/core/note-engine";
+import { Toaster } from "sonner";
 
 type View = "landing" | "notes" | "viewer" | "editor";
 
@@ -130,6 +131,21 @@ function App() {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <Toaster
+        position="bottom-right"
+        richColors
+        closeButton
+        duration={3000}
+        toastOptions={{
+          style: {
+            background: "white",
+            border: "1px solid #e5e7eb",
+            borderRadius: "12px",
+            padding: "16px",
+          },
+          className: "shadow-lg",
+        }}
+      />
       {/* Header - Only show on landing view */}
       {currentView === "landing" && (
         <div className="relative bg-gradient-to-br from-blue-500 to-blue-700 py-4 px-6 text-center shadow-md">
@@ -142,7 +158,7 @@ function App() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {currentView === "landing" && (
           <LandingPage
             onCreateNote={handleCreateNote}
