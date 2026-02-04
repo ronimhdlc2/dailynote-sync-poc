@@ -2,7 +2,7 @@
 // Uses SAME shared logic as mobile app!
 // Redesigned to match landing page theme
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   createNote,
   updateNoteContent,
@@ -20,6 +20,10 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import { toast } from "sonner";
 
 // NoteEditor.tsx props interface
 interface NoteEditorProps {
@@ -35,6 +39,17 @@ export default function NoteEditor({
 }: NoteEditorProps) {
   const [note, setNote] = useState<Note>(() => initialNote || createNote());
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const updated = updateNoteContent(note, e.target.value);
@@ -49,30 +64,38 @@ export default function NoteEditor({
   const handleSave = () => {
     const validation = validateNote(note);
     if (!validation.valid) {
-      alert(validation.error);
+      toast.error("Validation Error", {
+        description: validation.error,
+      });
       return;
     }
 
-    console.log("💾 Saving note:", {
-      filename: getNoteFilename(note),
-      note: note,
-    });
-
-    // In a real app, we would save to disk/db here
-    // Add success feedback
-    alert(`✅ Note saved successfully!\n\nFilename: ${getNoteFilename(note)}`);
-
     if (onSave) {
       onSave(note);
+      toast.success("Note saved successfully!", {
+        description: `Filename: ${getNoteFilename(note)}`,
+      });
     }
   };
 
   const handleCancel = () => {
-    if (
-      note.content.trim() &&
-      note.content !== (initialNote?.content || "") &&
-      !confirm("Discard changes?")
-    ) {
+    if (note.content.trim() && note.content !== (initialNote?.content || "")) {
+      // toast action buttons
+      toast.warning("Discard changes?", {
+        description: "You have unsaved changes",
+        action: {
+          label: "Discard",
+          onClick: () => {
+            if (onCancel) {
+              onCancel();
+            }
+          },
+        },
+        cancel: {
+          label: "Keep editing",
+          onClick: () => {},
+        },
+      });
       return;
     }
 
@@ -81,12 +104,12 @@ export default function NoteEditor({
     }
   };
 
-  const hasChanges = 
-  note.content !== (initialNote?.content || '') ||
-  note.title !== (initialNote?.title || note.title);
+  const hasChanges =
+    note.content !== (initialNote?.content || "") ||
+    note.title !== (initialNote?.title || note.title);
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
       {/* Header */}
       <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
         <div className="px-6 py-4 flex items-center justify-between">
@@ -178,13 +201,43 @@ export default function NoteEditor({
                 Your Daily Note
               </span>
             </div>
-            <span className="text-xs text-gray-500">
-              {note.content.length} characters
-            </span>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPreview(!showPreview)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  showPreview
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-gray-600 border-gray-300"
+                }`}
+              >
+                {showPreview ? "✏️ Edit" : "👁️ Preview"}
+              </button>
+
+              <span className="text-xs text-gray-500">
+                {note.content.length} characters
+              </span>
+            </div>
           </div>
 
+          {/* Preview */}
+          <div
+            className={`flex-1 overflow-y-auto prose prose-sm max-w-none ${
+              showPreview ? "block" : "hidden"
+            }`}
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+              {note.content || "*No content to preview*"}
+            </ReactMarkdown>
+          </div>
+
+          {/* Editor */}
           <textarea
-            className="flex-1 w-full border-none outline-none text-base leading-relaxed text-gray-800 resize-none font-sans placeholder:text-gray-400"
+            ref={textareaRef}
+            className={`flex-1 w-full border-none outline-none text-base leading-relaxed text-gray-800 resize-none font-sans placeholder:text-gray-400 ${
+              showPreview ? "hidden" : "block"
+            }`}
             placeholder="Start writing your thoughts here...
 
 You can use markdown formatting:
@@ -198,37 +251,37 @@ Write freely and let your thoughts flow..."
             onChange={handleContentChange}
           />
         </div>
-      </div>
 
-      {/* Action Bar */}
-      <div className="border-t border-gray-200 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-5xl w-full mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          {/* Left side - Info */}
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span className="font-medium">Filename:</span>
-            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-              {getNoteFilename(note)}
-            </span>
-          </div>
+        {/* Action Bar */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left side - Info */}
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span className="font-medium">Filename:</span>
+              <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                {getNoteFilename(note)}
+              </span>
+            </div>
 
-          {/* Right side - Actions */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleCancel}
-              className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
-            >
-              <X className="w-4 h-4" />
-              Cancel
-            </button>
+            {/* Right side - Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancel}
+                className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
 
-            <button
-              onClick={handleSave}
-              disabled={!note.content.trim() || !hasChanges}
-              className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 border-none rounded-xl text-sm text-white font-bold hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/30 transition-all disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none"
-            >
-              <Save className="w-4 h-4" />
-              Save Note
-            </button>
+              <button
+                onClick={handleSave}
+                disabled={!note.content.trim() || !hasChanges}
+                className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 border-none rounded-xl text-sm text-white font-bold hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/30 transition-all disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                <Save className="w-4 h-4" />
+                Save Note
+              </button>
+            </div>
           </div>
         </div>
       </div>

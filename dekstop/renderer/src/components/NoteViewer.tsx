@@ -1,7 +1,17 @@
 // Desktop Note Viewer Component - Read-Only Mode
-import { BookOpen, X, Edit3, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  BookOpen,
+  X,
+  Edit3,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import type { Note } from "shared/models/note";
 import { getNoteFilename, formatNoteDate } from "shared/core/note-engine";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 
 interface NoteViewerProps {
   note: Note;
@@ -11,7 +21,7 @@ interface NoteViewerProps {
 
 export default function NoteViewer({ note, onClose, onEdit }: NoteViewerProps) {
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
       {/* Header */}
       <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
         <div className="px-6 py-4 flex items-center justify-between">
@@ -43,12 +53,16 @@ export default function NoteViewer({ note, onClose, onEdit }: NoteViewerProps) {
               {note.isSynced ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <span className="text-xs text-green-700 font-medium">Synced</span>
+                  <span className="text-xs text-green-700 font-medium">
+                    Synced
+                  </span>
                 </>
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 text-orange-600" />
-                  <span className="text-xs text-orange-700 font-medium">Not synced</span>
+                  <span className="text-xs text-orange-700 font-medium">
+                    Not synced
+                  </span>
                 </>
               )}
             </div>
@@ -67,7 +81,9 @@ export default function NoteViewer({ note, onClose, onEdit }: NoteViewerProps) {
               <span>Created: {formatNoteDate(note.createdAt)}</span>
             </div>
             <span>•</span>
-            <span>ID: <span className="font-mono text-xs">{note.id}</span></span>
+            <span>
+              ID: <span className="font-mono text-xs">{note.id}</span>
+            </span>
           </div>
         </div>
 
@@ -76,16 +92,17 @@ export default function NoteViewer({ note, onClose, onEdit }: NoteViewerProps) {
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-gray-500" />
-              <span className="text-sm font-semibold text-gray-700">Content</span>
+              <span className="text-sm font-semibold text-gray-700">
+                Content
+              </span>
             </div>
-            <span className="text-xs text-gray-500">{note.content.length} characters</span>
+            <span className="text-xs text-gray-500">
+              {note.content.length} characters
+            </span>
           </div>
 
-          {/* Read-only content - Preserve whitespace and line breaks */}
-          <div className="prose prose-sm max-w-none">
-            <pre className="whitespace-pre-wrap font-sans text-base leading-relaxed text-gray-800 bg-transparent border-none p-0 m-0">
-              {note.content || "No content"}
-            </pre>
+          <div className="prose prose-sm max-w-none text-base leading-relaxed text-gray-800">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{note.content || "No content"}</ReactMarkdown>
           </div>
         </div>
 
