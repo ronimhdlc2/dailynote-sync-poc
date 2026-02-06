@@ -12,9 +12,32 @@ import {
   RefreshCw,
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useState } from 'react';
+import { GoogleAuth } from '../services/google-auth';
 
 export default function RootHome() {
   const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const isSignedIn = await GoogleAuth.isSignedIn();
+    if (!isSignedIn) {
+      router.replace('/auth');
+    }
+    setIsChecking(false);
+  };
+
+  if (isChecking) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1" edges={["top", "bottom"]}>

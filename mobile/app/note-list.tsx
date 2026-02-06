@@ -20,6 +20,7 @@ import {
   Eye,
 } from "lucide-react-native";
 import type { Note } from "shared/models/note";
+import { GoogleAuth } from "../services/google-auth";
 
 import { NoteStorage } from "../services/storage";
 import { useFocusEffect } from "expo-router";
@@ -99,6 +100,20 @@ export default function NotesScreen() {
     return plain.length > 100 ? plain.substring(0, 100) + "..." : plain;
   };
 
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          await GoogleAuth.signOut();
+          router.replace("/auth");
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
       <View className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
@@ -128,6 +143,12 @@ export default function NotesScreen() {
                   {notes.length} {notes.length === 1 ? "note" : "notes"}
                 </Text>
               </View>
+
+              <TouchableOpacity onPress={handleLogout}>
+                <Text className="text-sm text-red-600 font-semibold">
+                  Logout
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
