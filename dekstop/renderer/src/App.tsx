@@ -5,7 +5,9 @@ import NoteEditor from "./components/NoteEditor";
 import NoteViewer from "./components/NoteViewer";
 import type { Note } from "shared/models/note";
 import { getNotesSorted, deleteNote } from "shared/core/note-engine";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
+import AuthScreen from "./components/AuthScreen";
+import { GoogleAuth } from "../../services/google-auth";
 
 type View = "landing" | "notes" | "viewer" | "editor";
 
@@ -13,6 +15,11 @@ function App() {
   const [currentView, setCurrentView] = useState<View>("landing");
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+// Langsung cek authentication saat inisialisasi
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return GoogleAuth.loadTokens();
+  });
+  
 
   // Load notes from localStorage
   const [notes, setNotes] = useState<Note[]>(() => {
@@ -25,6 +32,39 @@ function App() {
       return [];
     }
   });
+
+  const handleAuthSuccess = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = async () => {
+    try {
+      toast.success('Successfully logged out', {
+        description: 'See you next time!',
+      });
+      
+      // Small delay to show toast before state changes
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      GoogleAuth.signOut();
+      setIsAuthenticated(false);
+      // Clear any cached data if needed
+      setNotes([]);
+      setCurrentView("landing");
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if there's an error, still logout locally
+      toast.info('Logged out', {
+        description: 'Session ended',
+      });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setIsAuthenticated(false);
+    }
+  };
+
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
 
   // Save to localStorage whenever notes change
   const saveNotesToStorage = (updatedNotes: Note[]) => {
@@ -149,6 +189,12 @@ function App() {
       {/* Header - Only show on landing view */}
       {currentView === "landing" && (
         <div className="relative bg-gradient-to-br from-blue-500 to-blue-700 py-4 px-6 text-center shadow-md">
+          <button
+            onClick={handleLogout}
+            className="cursor-pointer absolute top-4 right-6 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+          >
+            Logout
+          </button>
           <h1 className="text-2xl font-bold text-white m-0">
             {getHeaderTitle()}
           </h1>
