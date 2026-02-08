@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc preload.ts --outDir dist",
     "start": "npm run build && electron .",
     "dev": "vite",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -14,13 +14,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.4",
     "electron": "^40.0.0",
+    "googleapis": "^171.4.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
-    "@types/node": "^25.0.10",
     "@vitejs/plugin-react": "^5.1.2",
     "vite": "^7.3.1"
   }
