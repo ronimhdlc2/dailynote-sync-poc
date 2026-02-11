@@ -11,6 +11,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -38,6 +39,8 @@ import { Note } from "shared/models/note";
 import { NoteStorage } from "../services/storage";
 import { useLocalSearchParams } from "expo-router";
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleDriveService } from '../services/google-drive';
 
 export default function AddNote() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,6 +49,7 @@ export default function AddNote() {
   const [isLoading, setIsLoading] = useState(!!id);
   const router = useRouter();
   const [showPreview, setShowPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load existing note if id is present
   React.useEffect(() => {
@@ -81,18 +85,48 @@ export default function AddNote() {
     return;
   }
 
+  setIsSaving(true);
+
   try {
+    // Save to local storage
     await NoteStorage.saveNote(note);
     
-    // Toast untuk success feedback
-    Toast.show({
-  type: 'success',
-  text1: 'Note saved successfully!',
-  text2: `Filename: ${getNoteFilename(note)}`,
-  position: 'bottom',
-  visibilityTime: 3000,
-  bottomOffset: 60,
-});
+    // Try to sync to Google Drive
+    const folderId = await AsyncStorage.getItem('drive-folder-id');
+    if (folderId) {
+      try {
+        const driveFileId = await GoogleDriveService.uploadNote(note, folderId);
+        note.driveFileId = driveFileId;
+        note.isSynced = true;
+        await NoteStorage.saveNote(note); // Update with driveFileId
+
+         // ✅ UPDATE LAST SYNC TIME
+        const syncTime = new Date().toISOString();
+        await AsyncStorage.setItem('last-sync-time', syncTime);
+        
+        Toast.show({
+          type: 'success',
+          text1: 'Note saved & synced!',
+          text2: 'Uploaded to Google Drive',
+          position: 'bottom',
+        });
+      } catch (error) {
+        console.error('Upload error:', error);
+        Toast.show({
+          type: 'warning',
+          text1: 'Saved locally',
+          text2: 'Will sync when online',
+          position: 'bottom',
+        });
+      }
+    } else {
+      Toast.show({
+        type: 'success',
+        text1: 'Note saved locally',
+        text2: `Filename: ${getNoteFilename(note)}`,
+        position: 'bottom',
+      });
+    }
     
     router.back(); 
   } catch (error) {
@@ -103,6 +137,8 @@ export default function AddNote() {
       position: 'top',
     });
     console.error(error);
+  } finally {
+    setIsSaving(false);
   }
 };
 
@@ -365,6 +401,21 @@ Write freely and let your thoughts flow...`}
             </View>
           </View>
         </View>
+
+        {/* Loading Overlay */}
+        {isSaving && (
+          <View className="absolute inset-0 bg-black/30 items-center justify-center z-50">
+            <View className="bg-white rounded-2xl p-8 items-center shadow-xl">
+              <ActivityIndicator size="large" color="#2563eb" className="mb-4" />
+              <View className="items-center">
+                <Text className="text-lg font-bold text-gray-900">Saving note...</Text>
+                <Text className="text-sm text-gray-600 mt-1">
+                  Syncing to Google Drive
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );

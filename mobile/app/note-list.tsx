@@ -1,11 +1,12 @@
-// mobile/app/notes.tsx
+// mobile/app/note-list.tsx
 
 /**
  * Notes List Screen (Mobile)
  * Display all notes in chronological order (newest first)
+ * WITH GOOGLE DRIVE SYNC
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,28 +19,200 @@ import {
   Clock,
   FileText,
   Eye,
+  RefreshCw,
 } from "lucide-react-native";
 import type { Note } from "shared/models/note";
 import { GoogleAuth } from "../services/google-auth";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { GoogleDriveService } from "../services/google-drive";
+import { mergeNotes } from "shared/core/note-engine";
 import { NoteStorage } from "../services/storage";
 import { useFocusEffect } from "expo-router";
+
+// ✅ HELPER FUNCTION
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Unknown error occurred";
+};
 
 export default function NotesScreen() {
   const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
+  // ✅ LOAD LAST SYNC TIME SAAT MOUNT
+  useEffect(() => {
+    loadLastSyncTime();
+  }, []);
+
+  // Load notes when screen is focused
   useFocusEffect(
     React.useCallback(() => {
       loadNotes();
+      loadLastSyncTime(); // ✅ RELOAD SYNC TIME JUGA
     }, []),
   );
 
-  const loadNotes = async () => {
-    const loaded = await NoteStorage.getNotes();
-    setNotes(loaded);
+  // Auto-sync every 10 minutes
+  useEffect(() => {
+    const syncInterval = setInterval(
+      () => {
+        handleSync();
+      },
+      10 * 60 * 1000,
+    ); // 10 minutes
+
+    return () => clearInterval(syncInterval);
+  }, []);
+
+  // ✅ TAMBAHKAN FUNGSI LOAD LAST SYNC TIME
+  const loadLastSyncTime = async () => {
+    try {
+      const syncTimeStr = await AsyncStorage.getItem("last-sync-time");
+      if (syncTimeStr) {
+        setLastSyncTime(new Date(syncTimeStr));
+        console.log("✅ Last sync time loaded:", syncTimeStr);
+      } else {
+        console.log("⚠️ No last sync time found");
+      }
+    } catch (error) {
+      console.error("Load sync time error:", error);
+    }
   };
 
+  // Load notes from local storage
+  const loadNotes = async () => {
+    try {
+      const loaded = await NoteStorage.getNotes();
+      setNotes(loaded || []); // ✅ FALLBACK TO EMPTY ARRAY
+    } catch (error) {
+      console.error("Load notes error:", error);
+      setNotes([]);
+    }
+  };
+
+  // Sync with Google Drive
+  const handleSync = async () => {
+    if (isSyncing) return;
+
+    try {
+      setIsSyncing(true);
+
+      const folderId = await AsyncStorage.getItem("drive-folder-id");
+      if (!folderId) {
+        Toast.show({
+          type: "error",
+          text1: "Sync not configured",
+          text2: "Please restart the app",
+          position: "top",
+          visibilityTime: 3000,
+          topOffset: 60,
+        });
+        return;
+      }
+
+      console.log("🔄 Syncing with Google Drive...");
+
+      // 1. Upload unsynced local notes FIRST
+      const initialLocalNotes = await NoteStorage.getNotes();
+      const unsyncedToUpload = initialLocalNotes.filter((n) => !n.isSynced);
+      const justUploadedIds = new Set<string>();
+
+      if (unsyncedToUpload.length > 0) {
+        console.log(`📤 Found ${unsyncedToUpload.length} unsynced notes, uploading...`);
+        Toast.show({
+          type: "info",
+          text1: "Syncing offline notes...",
+          text2: `${unsyncedToUpload.length} notes pending`,
+          position: "top",
+          visibilityTime: 2000,
+          topOffset: 60,
+        });
+
+        for (const note of unsyncedToUpload) {
+          try {
+            const driveFileId = await GoogleDriveService.uploadNote(note, folderId);
+            // Update local note status
+            const updatedNote = { ...note, driveFileId, isSynced: true };
+            await NoteStorage.saveNote(updatedNote);
+            justUploadedIds.add(note.id); // Track success upload
+            console.log(`✅ Uploaded: ${note.title}`);
+          } catch (err) {
+            console.error(`❌ Failed to upload ${note.title}:`, err);
+            // Ignore error, will retry next time
+          }
+        }
+      }
+
+      // 2. Download notes from Google Drive
+      const remoteNotes = await GoogleDriveService.downloadAllNotes(folderId);
+      console.log("📥 Downloaded", remoteNotes.length, "notes from Drive");
+
+      // 3. Get updated local notes
+      const localNotes = await NoteStorage.getNotes();
+      console.log("📱 Found", localNotes.length, "local notes");
+
+      // Filter local notes: hanya ambil yang belum sync (gagal upload)
+      const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
+
+      // Combine: remote notes + unsynced local notes
+      const merged = [...remoteNotes, ...unsyncedLocalNotes];
+
+      // 4. Latency Protection: Add just-uploaded notes if missing from remote
+      const remoteIds = new Set(remoteNotes.map((n) => n.id));
+      localNotes.forEach((n) => {
+        if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
+          merged.push(n);
+          console.log(
+            `⚠️ Preserving just-uploaded note "${n.title}" (latency protection)`,
+          );
+        }
+      });
+
+      console.log("🔀 Merged to", merged.length, "notes");
+
+      // ✅ CLEAR STORAGE DULU, LALU SAVE MERGED
+      await AsyncStorage.removeItem("dailynote-notes");
+
+      for (const note of merged) {
+        await NoteStorage.saveNote(note);
+      }
+
+      await loadNotes();
+
+      const syncTime = new Date();
+      setLastSyncTime(syncTime);
+      await AsyncStorage.setItem("last-sync-time", syncTime.toISOString());
+      console.log("✅ Last sync time updated:", syncTime.toISOString());
+
+      Toast.show({
+        type: "success",
+        text1: "Synced successfully",
+        text2: `${merged.length} notes`,
+        position: "top",
+        visibilityTime: 2000,
+        topOffset: 60,
+      });
+
+      console.log("✅ Sync completed");
+    } catch (error) {
+      console.error("❌ Sync error:", error);
+      Toast.show({
+        type: "error",
+        text1: "Sync failed",
+        text2: getErrorMessage(error),
+        position: "top",
+        visibilityTime: 3000,
+        topOffset: 60,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Delete note (local + Google Drive)
   const handleDeleteNote = (noteId: string) => {
     const note = notes.find((n) => n.id === noteId);
 
@@ -55,44 +228,94 @@ export default function NotesScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await NoteStorage.deleteNote(noteId);
-            await loadNotes();
-            Toast.show({
-              type: "success",
-              text1: "Note deleted",
-              text2: `"${note?.title}" has been deleted`,
-              position: "top",
-              visibilityTime: 3000,
-              topOffset: 60,
-            });
+            try {
+              // Delete from local storage
+              await NoteStorage.deleteNote(noteId);
+
+              // Try to delete from Google Drive
+              if (note?.driveFileId) {
+                try {
+                  await GoogleDriveService.deleteNote(note.driveFileId);
+
+                  const syncTime = new Date().toISOString();
+                  await AsyncStorage.setItem("last-sync-time", syncTime);
+
+                  Toast.show({
+                    type: "success",
+                    text1: "Note deleted",
+                    text2: "Removed from Google Drive",
+                    position: "top",
+                    visibilityTime: 3000,
+                    topOffset: 60,
+                  });
+                } catch (error) {
+                  console.error("Delete from Drive error:", error);
+                  Toast.show({
+                    type: "warning",
+                    text1: "Deleted locally",
+                    text2: "Will sync deletion when online",
+                    position: "top",
+                    visibilityTime: 3000,
+                    topOffset: 60,
+                  });
+                }
+              } else {
+                Toast.show({
+                  type: "success",
+                  text1: "Note deleted",
+                  text2: `"${note?.title}" has been deleted`,
+                  position: "top",
+                  visibilityTime: 3000,
+                  topOffset: 60,
+                });
+              }
+
+              await loadNotes();
+              await loadLastSyncTime(); // ✅ RELOAD SYNC TIME
+            } catch (error) {
+              console.error("Delete error:", error);
+              Toast.show({
+                type: "error",
+                text1: "Delete failed",
+                text2: getErrorMessage(error),
+                position: "top",
+              });
+            }
           },
         },
       ],
     );
   };
 
+  // Format date for display
   const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    try {
+      const date = new Date(isoString);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
 
-    if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
-    } else {
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      if (date.toDateString() === today.toDateString()) {
+        return `Today, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+      } else {
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    } catch (error) {
+      return "Invalid date";
     }
   };
 
+  // Get note preview (first 100 chars)
   const getPreview = (content: string) => {
-    // Remove markdown and get first 100 characters
+    if (!content) return "No content";
+
     const plain = content
       .replace(/[*_~`#]/g, "")
       .replace(/\n+/g, " ")
@@ -100,6 +323,24 @@ export default function NotesScreen() {
     return plain.length > 100 ? plain.substring(0, 100) + "..." : plain;
   };
 
+  // Format last sync time
+  const formatSyncTime = () => {
+    if (!lastSyncTime) return "Not synced";
+
+    try {
+      const seconds = Math.floor(
+        (new Date().getTime() - lastSyncTime.getTime()) / 1000,
+      );
+      if (seconds < 60) return "Just now";
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return lastSyncTime.toLocaleDateString();
+    } catch (error) {
+      return "Unknown";
+    }
+  };
+
+  // Logout
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -107,8 +348,13 @@ export default function NotesScreen() {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          await GoogleAuth.signOut();
-          router.replace("/auth");
+          try {
+            await GoogleAuth.signOut();
+            await AsyncStorage.clear();
+            router.replace("/auth");
+          } catch (error) {
+            console.error("Logout error:", error);
+          }
         },
       },
     ]);
@@ -121,6 +367,7 @@ export default function NotesScreen() {
         <View className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
           <View className="px-6 py-4 pt-12">
             <View className="flex-row items-center justify-between mb-2">
+              {/* Logo & Title */}
               <View className="flex-row items-center gap-3">
                 <LinearGradient
                   colors={["#2563eb", "#1d4ed8"]}
@@ -138,20 +385,71 @@ export default function NotesScreen() {
                 </View>
               </View>
 
-              <View className="px-3 py-1.5 bg-blue-100 rounded-lg">
-                <Text className="text-sm font-semibold text-blue-700">
-                  {notes.length} {notes.length === 1 ? "note" : "notes"}
-                </Text>
-              </View>
+              {/* Sync Status & Refresh Button */}
+              <View className="flex-row items-center gap-2">
+                {/* Sync Status Indicator */}
+                <View
+                  className={`flex-row items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                    isSyncing
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-gray-200"
+                  }`}
+                >
+                  <View
+                    className={`w-2 h-2 rounded-full ${
+                      isSyncing ? "bg-blue-500" : "bg-green-500"
+                    }`}
+                  />
+                  <Text className="text-xs text-gray-600 font-medium">
+                    {formatSyncTime()}
+                  </Text>
+                </View>
 
-              <TouchableOpacity onPress={handleLogout}>
-                <Text className="text-sm text-red-600 font-semibold">
-                  Logout
-                </Text>
-              </TouchableOpacity>
+                {/* Refresh Button */}
+                <TouchableOpacity
+                  onPress={handleSync}
+                  disabled={isSyncing}
+                  className={`p-2 rounded-lg ${
+                    isSyncing ? "bg-blue-100" : "bg-blue-50"
+                  }`}
+                >
+                  <RefreshCw color="#2563eb" size={18} />
+                </TouchableOpacity>
+
+                {/* Notes Count */}
+                <View className="px-3 py-1.5 bg-blue-100 rounded-lg">
+                  <Text className="text-sm font-semibold text-blue-700">
+                    {notes.length}
+                  </Text>
+                </View>
+
+                {/* Logout Button */}
+                <TouchableOpacity onPress={handleLogout}>
+                  <Text className="text-sm text-red-600 font-semibold">
+                    Logout
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
+
+        {/* Sync Loading Banner */}
+        {isSyncing && (
+          <View className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+            <View className="flex-row items-center gap-3">
+              <RefreshCw color="#2563eb" size={16} />
+              <View className="flex-1">
+                <Text className="text-sm text-blue-700 font-medium">
+                  Syncing with Google Drive...
+                </Text>
+                <Text className="text-xs text-blue-600">
+                  Please wait while we sync your notes
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Notes List */}
         {notes.length === 0 ? (
@@ -177,17 +475,17 @@ export default function NotesScreen() {
         ) : (
           <ScrollView className="flex-1 px-6 py-4">
             {notes.map((note) => (
-              <TouchableOpacity // ✅ Ubah View jadi TouchableOpacity
+              <TouchableOpacity
                 key={note.id}
                 className="bg-white rounded-xl shadow-lg border border-gray-200 p-5 mb-4"
-                onPress={() => router.push(`/note-viewer?id=${note.id}`)} // ✅ Klik card = view note
+                onPress={() => router.push(`/note-viewer?id=${note.id}`)}
                 activeOpacity={0.7}
               >
                 {/* Note Header */}
                 <View className="flex-row items-start justify-between mb-3">
                   <View className="flex-1 mr-3">
                     <Text className="text-lg font-bold text-gray-900 mb-1">
-                      {note.title}
+                      {note.title || "Untitled"}
                     </Text>
                     <View className="flex-row items-center gap-2">
                       <Clock color="#6b7280" size={14} />
@@ -223,22 +521,19 @@ export default function NotesScreen() {
                   <TouchableOpacity
                     className="flex-1 flex-row items-center justify-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg active:opacity-70"
                     onPress={(e) => {
-                      // ✅ Tambahkan stopPropagation
                       e.stopPropagation();
-                      router.push(`/note-viewer?id=${note.id}`); // ✅ View dulu
+                      router.push(`/note-viewer?id=${note.id}`);
                     }}
                   >
                     <Eye color="#2563eb" size={16} />
                     <Text className="text-sm font-semibold text-blue-600">
                       View
                     </Text>
-                    {/* ✅ Ubah text */}
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     className="flex-1 flex-row items-center justify-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg active:opacity-70"
                     onPress={(e) => {
-                      // ✅ Tambahkan stopPropagation
                       e.stopPropagation();
                       handleDeleteNote(note.id);
                     }}
@@ -249,7 +544,7 @@ export default function NotesScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </TouchableOpacity> // ✅ Tutup TouchableOpacity
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}

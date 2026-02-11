@@ -1,7 +1,5 @@
 // mobile/app/index.tsx
-// Landing Page dengan navigation ke notes dan add-note
-
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -10,14 +8,27 @@ import {
   Smartphone,
   Lock,
   RefreshCw,
+  LogOut, // ← TAMBAHKAN INI
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from 'react';
-import { GoogleAuth } from '../services/google-auth';
+import { useEffect, useState } from "react";
+import { GoogleAuth } from "../services/google-auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { GoogleDriveService } from "../services/google-drive";
+import { NoteStorage } from "../services/storage";
+import { mergeNotes } from "shared/core/note-engine";
+import Toast from "react-native-toast-message";
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Unknown error occurred";
+};
 
 export default function RootHome() {
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -26,15 +37,155 @@ export default function RootHome() {
   const checkAuth = async () => {
     const isSignedIn = await GoogleAuth.isSignedIn();
     if (!isSignedIn) {
-      router.replace('/auth');
+      router.replace("/auth");
+      setIsChecking(false);
+      return;
     }
+
+    await initializeSync();
     setIsChecking(false);
   };
 
-  if (isChecking) {
+  const initializeSync = async () => {
+    try {
+      setIsSyncing(true);
+
+      const user = await GoogleAuth.getCurrentUser();
+      if (!user) {
+        console.log("❌ No user found, skipping sync");
+        return;
+      }
+
+      console.log("🔄 Initializing Google Drive sync for:", user.email);
+
+      const token = await GoogleAuth.getAccessToken();
+      if (!token) {
+        throw new Error("No access token found. Please login again.");
+      }
+      console.log("🔑 Token exists, length:", token.length);
+
+      let folderId;
+      try {
+        folderId = await GoogleDriveService.ensureUserFolder(user.email);
+
+        if (!folderId || typeof folderId !== "string") {
+          throw new Error("Invalid folder ID received from Google Drive");
+        }
+
+        console.log("✅ Drive folder ready:", folderId);
+        await AsyncStorage.setItem("drive-folder-id", folderId);
+      } catch (error) {
+        console.error("❌ Failed to ensure folder:", error);
+        throw new Error(
+          `Failed to create/find Google Drive folder: ${getErrorMessage(error)}`,
+        );
+      }
+
+      const remoteNotes = await GoogleDriveService.downloadAllNotes(folderId);
+      console.log("📥 Downloaded", remoteNotes.length, "notes from Drive");
+
+      const localNotes = await NoteStorage.getNotes();
+      console.log("📱 Found", localNotes.length, "local notes");
+
+      const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
+      const merged = [...remoteNotes, ...unsyncedLocalNotes];
+      console.log("🔀 Merged to", merged.length, "notes");
+
+      // ✅ CLEAR STORAGE DULU
+      await AsyncStorage.removeItem("dailynote-notes");
+
+      for (const note of merged) {
+        await NoteStorage.saveNote(note);
+      }
+
+      const syncTime = new Date().toISOString();
+      await AsyncStorage.setItem("last-sync-time", syncTime);
+      console.log("✅ Last sync time saved:", syncTime);
+
+      Toast.show({
+        type: "success",
+        text1: "Synced with Google Drive",
+        text2: `${merged.length} notes ready`,
+        position: "top",
+        visibilityTime: 3000,
+        topOffset: 60,
+      });
+
+      console.log("✅ Sync completed successfully");
+    } catch (error) {
+      console.error("❌ Sync initialization error:", error);
+
+      Toast.show({
+        type: "error",
+        text1: "Sync failed",
+        text2: getErrorMessage(error),
+        position: "top",
+        visibilityTime: 5000,
+        topOffset: 60,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // ✅ TAMBAHKAN FUNGSI LOGOUT
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            // Clear Google auth
+            await GoogleAuth.signOut();
+
+            // Clear AsyncStorage
+            await AsyncStorage.clear();
+
+            Toast.show({
+              type: "success",
+              text1: "Logged out",
+              text2: "See you next time!",
+              position: "top",
+              visibilityTime: 2000,
+              topOffset: 60,
+            });
+
+            // Redirect to auth
+            router.replace("/auth");
+          } catch (error) {
+            console.error("Logout error:", error);
+            Toast.show({
+              type: "error",
+              text1: "Logout failed",
+              text2: getErrorMessage(error),
+              position: "top",
+            });
+          }
+        },
+      },
+    ]);
+  };
+
+  if (isChecking || isSyncing) {
     return (
-      <View className="flex-1 items-center justify-center">
-        <Text>Loading...</Text>
+      <View className="flex-1 items-center justify-center bg-white">
+        <LinearGradient
+          colors={["#2563eb", "#1d4ed8"]}
+          className="w-20 h-20 rounded-full items-center justify-center mb-4"
+        >
+          <BookOpen color="white" size={32} />
+        </LinearGradient>
+        <Text className="text-lg font-semibold text-gray-900 mb-2">
+          {isChecking ? "Loading..." : "Syncing with Google Drive..."}
+        </Text>
+        <Text className="text-sm text-gray-500">
+          {isSyncing && "Please wait while we sync your notes"}
+        </Text>
       </View>
     );
   }
@@ -42,7 +193,7 @@ export default function RootHome() {
   return (
     <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
       <ScrollView className="flex-1 bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
-        {/* Header */}
+        {/* ✅ TAMBAHKAN HEADER DENGAN LOGOUT BUTTON */}
         <View className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
           <View className="px-6 py-4 flex-row items-center justify-between">
             <View className="flex-row items-center gap-3">
@@ -56,7 +207,15 @@ export default function RootHome() {
               </LinearGradient>
               <Text className="text-xl font-bold text-gray-900">DailyNote</Text>
             </View>
-            <Text className="text-sm text-gray-500 font-medium">v1.0 POC</Text>
+
+            {/* ✅ LOGOUT BUTTON */}
+            <TouchableOpacity
+              onPress={handleLogout}
+              className="flex-row items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg active:opacity-70"
+            >
+              <LogOut color="#dc2626" size={18} />
+              <Text className="text-sm font-semibold text-red-600">Logout</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

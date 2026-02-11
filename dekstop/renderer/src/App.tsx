@@ -110,7 +110,7 @@ function App() {
       }, [] as Note[]);
 
       saveNotesToStorage(merged);
-      setLastSyncTime(new Date())
+      setLastSyncTime(new Date());
       toast.success("Synced with Google Drive");
     } catch (error) {
       console.error("Drive init error:", error);
@@ -121,7 +121,6 @@ function App() {
   };
 
   const handleAutoSync = async () => {
-    // Skip if already syncing or not authenticated
     if (isSyncing || !isAuthenticated || !userFolderId) {
       return;
     }
@@ -129,17 +128,72 @@ function App() {
     try {
       setIsSyncing(true);
 
-      // Download remote notes
+      // 1. Upload unsynced local notes FIRST
+      // Ini memastikan offline edits dikirim ke cloud sebelum sync download
+      const unsyncedToUpload = notes.filter((n) => !n.isSynced);
+      const justUploadedIds = new Set<string>();
+      let updatedNotesAfterUpload = [...notes];
+
+      if (unsyncedToUpload.length > 0) {
+        toast.info("Syncing offline notes...", {
+          description: `${unsyncedToUpload.length} notes pending upload`,
+        });
+
+        for (const note of unsyncedToUpload) {
+          try {
+            const driveFileId = await window.electronAPI.googleDrive.uploadNote(
+              note,
+              userFolderId,
+            );
+            
+            // Update local note status directly in our temporary array
+            // so subsequent merge uses the correct state
+            updatedNotesAfterUpload = updatedNotesAfterUpload.map((n) => 
+              n.id === note.id ? { ...n, driveFileId, isSynced: true } : n
+            );
+            
+            justUploadedIds.add(note.id);
+            console.log(`✅ Auto-uploaded: ${note.title}`);
+          } catch (err) {
+            console.error(`❌ Failed to auto-upload ${note.title}:`, err);
+          }
+        }
+        
+        // Update state with successful uploads before proceeding
+        if (justUploadedIds.size > 0) {
+           setNotes(updatedNotesAfterUpload);
+           saveNotesToStorage(getNotesSorted(updatedNotesAfterUpload));
+        }
+      }
+
+      // 2. Download remote notes
       const remoteNotes =
         await window.electronAPI.googleDrive.downloadNotes(userFolderId);
 
-      // Merge strategy: Remote wins for existing, keep local-only
-      const localNotes = notes;
-      const remoteIds = new Set(remoteNotes.map((n) => n.id));
-      const localOnlyNotes = localNotes.filter((n) => !remoteIds.has(n.id));
+      // ✅ PERBAIKAN: REPLACE LOCAL DENGAN REMOTE
+      // Remote adalah source of truth
+      // Jika note ada di local tapi tidak ada di remote = sudah dihapus
 
-      // Combine remote + local-only
-      const merged = [...remoteNotes, ...localOnlyNotes];
+      // use latest local state (which might have just been updated)
+      const localNotes = updatedNotesAfterUpload;
+
+      // Filter local notes: hanya ambil yang belum sync (isSynced = false)
+      // Notes yang sudah sync tapi tidak ada di remote = sudah dihapus
+      const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
+
+      // Combine: remote notes + unsynced local notes
+      const merged = [...remoteNotes, ...unsyncedLocalNotes];
+
+      // 3. Latency Protection: Add just-uploaded notes if missing from remote
+      const remoteIds = new Set(remoteNotes.map((n) => n.id));
+      localNotes.forEach((n) => {
+        if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
+          merged.push(n);
+          console.log(
+             `⚠️ Preserving just-uploaded note "${n.title}" (latency protection)`,
+          );
+        }
+      });
 
       // Check if there are changes
       const hasChanges =
@@ -148,14 +202,13 @@ function App() {
 
       if (hasChanges) {
         saveNotesToStorage(getNotesSorted(merged));
-        setLastSyncTime(new Date()); // ← Add this
+        setLastSyncTime(new Date());
         toast.success("Synced with Google Drive");
       } else {
         setLastSyncTime(new Date());
       }
     } catch (error) {
       console.error("❌ Auto-sync error:", error);
-      // Don't show error toast for auto-sync to avoid annoying user
     } finally {
       setIsSyncing(false);
     }
@@ -211,51 +264,60 @@ function App() {
   };
 
   const handleSaveNote = async (note: Note) => {
-    const existingIndex = notes.findIndex((n) => n.id === note.id);
-    let updatedNotes;
-    const isEditingExisting = existingIndex >= 0;
+  const existingIndex = notes.findIndex((n) => n.id === note.id);
+  let updatedNotes;
+  const isEditingExisting = existingIndex >= 0;
 
-    if (existingIndex >= 0) {
-      // Update existing
-      updatedNotes = [...notes];
-      // Note: note.updatedAt is already updated by the Editor (using note-engine)
-      updatedNotes[existingIndex] = note;
-    } else {
-      // Create new
-      updatedNotes = [note, ...notes];
+  if (existingIndex >= 0) {
+    // Update existing
+    updatedNotes = [...notes];
+    updatedNotes[existingIndex] = note;
+  } else {
+    // Create new
+    updatedNotes = [note, ...notes];
+  }
+
+  // ✅ PERBAIKAN: JANGAN CLOSE EDITOR DULU
+  // Save to local storage first
+  saveNotesToStorage(getNotesSorted(updatedNotes));
+
+  // ✅ VARIABLE UNTUK TRACK NOTE YANG AKAN DI-VIEW
+  let finalNote = note;
+
+  // Sync to Google Drive
+  if (userFolderId) {
+    try {
+      const driveFileId = await window.electronAPI.googleDrive.uploadNote(
+        note,
+        userFolderId,
+      );
+      
+      // ✅ UPDATE NOTE DENGAN DRIVE FILE ID
+      finalNote = { ...note, driveFileId, isSynced: true };
+      
+      const updatedWithSync = updatedNotes.map((n) =>
+        n.id === note.id ? finalNote : n,
+      );
+      saveNotesToStorage(getNotesSorted(updatedWithSync));
+      toast.success("Synced to Google Drive");
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to sync to Google Drive");
+      // ✅ JIKA GAGAL SYNC, TETAP GUNAKAN NOTE ORIGINAL
+      finalNote = { ...note, isSynced: false };
     }
+  }
 
-    // Sort notes ensures the most recently updated note is at the top
-    saveNotesToStorage(getNotesSorted(updatedNotes));
-    setEditingNote(null);
+  // ✅ CLOSE EDITOR DAN BUKA VIEWER SETELAH SYNC SELESAI
+  setEditingNote(null);
 
-    // Sync to Google Drive
-    if (userFolderId) {
-      try {
-        const driveFileId = await window.electronAPI.googleDrive.uploadNote(
-          note,
-          userFolderId,
-        );
-        // Update note with driveFileId
-        const noteWithDriveId = { ...note, driveFileId, isSynced: true };
-        const updatedWithSync = updatedNotes.map((n) =>
-          n.id === note.id ? noteWithDriveId : n,
-        );
-        saveNotesToStorage(getNotesSorted(updatedWithSync));
-        toast.success("Synced to Google Drive");
-      } catch (error) {
-        console.error("Upload error:", error);
-        toast.error("Failed to sync to Google Drive");
-      }
-    }
-
-    if (isEditingExisting) {
-      setViewingNote(note);
-      setCurrentView("viewer");
-    } else {
-      setCurrentView("notes");
-    }
-  };
+  if (isEditingExisting) {
+    setViewingNote(finalNote); // ✅ GUNAKAN FINAL NOTE (SUDAH UPDATE)
+    setCurrentView("viewer");
+  } else {
+    setCurrentView("notes");
+  }
+};
 
   const handleDeleteNote = async (noteId: string) => {
     const noteToDelete = notes.find((n) => n.id === noteId);
