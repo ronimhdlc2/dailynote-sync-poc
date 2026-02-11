@@ -182,10 +182,10 @@ export default function NotesList({
         </header>
 
         {/* Notes List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className={`flex-1 overflow-y-auto ${notes.length === 0 ? 'flex items-center justify-center' : ''}`}>
           {notes.length === 0 ? (
             // Empty State
-            <div className="flex flex-col items-center justify-center h-full px-6">
+            <div className="flex flex-col items-center justify-center px-6">
               <FileText className="w-24 h-24 text-gray-300 mb-6" />
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
                 No Notes Yet

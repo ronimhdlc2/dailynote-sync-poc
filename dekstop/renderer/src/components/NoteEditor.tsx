@@ -40,6 +40,7 @@ export default function NoteEditor({
   const [note, setNote] = useState<Note>(() => initialNote || createNote());
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export default function NoteEditor({
     setNote(updated);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const validation = validateNote(note);
     if (!validation.valid) {
       toast.error("Validation Error", {
@@ -70,12 +71,16 @@ export default function NoteEditor({
       return;
     }
 
+    setIsSaving(true);
+
     if (onSave) {
-      onSave(note);
+      await onSave(note);
       toast.success("Note saved successfully!", {
         description: `Filename: ${getNoteFilename(note)}`,
       });
     }
+
+    setIsSaving(false);
   };
 
   const handleCancel = () => {
@@ -157,6 +162,18 @@ export default function NoteEditor({
           </div>
         </div>
       </header>
+
+      {isSaving && (
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">Saving note...</p>
+              <p className="text-sm text-gray-600">Syncing to Google Drive</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col max-w-5xl w-full mx-auto p-6 gap-4 overflow-hidden">
@@ -267,6 +284,7 @@ Write freely and let your thoughts flow..."
             <div className="flex gap-3">
               <button
                 onClick={handleCancel}
+                disabled={isSaving}
                 className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
               >
                 <X className="w-4 h-4" />
@@ -279,7 +297,7 @@ Write freely and let your thoughts flow..."
                 className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 border-none rounded-xl text-sm text-white font-bold hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-600/30 transition-all disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 <Save className="w-4 h-4" />
-                Save Note
+                 {isSaving ? 'Saving...' : 'Save Note'}
               </button>
             </div>
           </div>
