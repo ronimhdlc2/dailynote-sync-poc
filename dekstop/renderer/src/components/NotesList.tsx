@@ -11,6 +11,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 import type { Note } from "shared/models/note";
 import {
@@ -18,8 +19,8 @@ import {
   formatNoteDate,
   getNoteById,
 } from "shared/core/note-engine";
-import { ConfirmDialog } from './ConfirmDialog';
-import { toast } from 'sonner';
+import { ConfirmDialog } from "./ConfirmDialog";
+import { toast } from "sonner";
 
 interface NotesListProps {
   notes: Note[];
@@ -27,6 +28,9 @@ interface NotesListProps {
   onEditNote?: (note: Note) => void;
   onDeleteNote?: (noteId: string) => void;
   onBack?: () => void;
+  onRefresh?: () => void; // ← Add this
+  isSyncing?: boolean;
+  lastSyncTime?: Date | null;
 }
 
 export default function NotesList({
@@ -35,10 +39,13 @@ export default function NotesList({
   onEditNote,
   onDeleteNote,
   onBack,
+  onRefresh,
+  isSyncing,
+  lastSyncTime,
 }: NotesListProps) {
   // State untuk delete confirmation dialog
-  const [deleteDialog, setDeleteDialog] = useState<{ 
-    open: boolean; 
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
     noteId: string | null;
   }>({
     open: false,
@@ -53,9 +60,9 @@ export default function NotesList({
     if (deleteDialog.noteId && onDeleteNote) {
       const note = getNoteById(notes, deleteDialog.noteId);
       onDeleteNote(deleteDialog.noteId);
-      
+
       // Toast untuk feedback
-      toast.success('Note deleted', {
+      toast.success("Note deleted", {
         description: `"${note?.title}" has been deleted`,
       });
     }
@@ -67,12 +74,13 @@ export default function NotesList({
     }
   };
 
-   return (
+  return (
     <>
       <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
         {/* Header */}
         <header className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
           <div className="px-6 py-4 flex items-center justify-between">
+            {/* Left Section: Back Button + Logo + Title */}
             <div className="flex items-center gap-3">
               {onBack && (
                 <button
@@ -83,22 +91,85 @@ export default function NotesList({
                   <ArrowLeft className="w-5 h-5" />
                 </button>
               )}
+
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/30">
                 <BookOpen className="w-5 h-5 text-white" />
               </div>
               <div>
-                <span className="text-xl font-bold text-gray-900">DailyNote</span>
+                <span className="text-xl font-bold text-gray-900">
+                  DailyNote
+                </span>
                 <span className="text-sm text-gray-500 ml-2">Your Notes</span>
               </div>
             </div>
 
+            {/* Right Section: Sync Info + Notes Count + New Note Button */}
             <div className="flex items-center gap-4">
+              {/* Sync Status Group */}
+              {onRefresh && (
+                <div
+                  className={`flex items-center gap-3 px-4 py-2 rounded-lg border transition-colors ${
+                    isSyncing
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-gray-200"
+                  }`}
+                >
+                  {/* Sync Indicator Dot */}
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      isSyncing ? "bg-blue-500 animate-pulse" : "bg-green-500"
+                    }`}
+                  ></div>
+
+                  {/* Last Sync Time */}
+                  {lastSyncTime ? (
+                    <span className="text-xs text-gray-600 font-medium">
+                      {(() => {
+                        const seconds = Math.floor(
+                          (new Date().getTime() - lastSyncTime.getTime()) /
+                            1000,
+                        );
+                        if (seconds < 60) return "Just now";
+                        if (seconds < 3600)
+                          return `${Math.floor(seconds / 60)}m ago`;
+                        if (seconds < 86400)
+                          return `${Math.floor(seconds / 3600)}h ago`;
+                        return lastSyncTime.toLocaleDateString();
+                      })()}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">Not synced</span>
+                  )}
+
+                  {/* Divider */}
+                  <div className="w-px h-4 bg-gray-300"></div>
+
+                  {/* Refresh Button */}
+                  <button
+                    onClick={onRefresh}
+                    disabled={isSyncing}
+                    className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh from Google Drive"
+                  >
+                    <RefreshCw
+                      size={14}
+                      className={isSyncing ? "animate-spin" : ""}
+                    />
+                    <span className="text-xs font-medium">
+                      {isSyncing ? "Syncing..." : "Refresh"}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* Notes Count */}
               <div className="px-4 py-2 bg-blue-100 rounded-lg">
                 <span className="text-sm font-semibold text-blue-700">
                   {notes.length} {notes.length === 1 ? "note" : "notes"}
                 </span>
               </div>
 
+              {/* New Note Button */}
               <button
                 onClick={onCreateNote}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl transition-all"
@@ -212,7 +283,7 @@ export default function NotesList({
         open={deleteDialog.open}
         onOpenChange={(open) => setDeleteDialog({ open, noteId: null })}
         title="Delete Note"
-        description={`Are you sure you want to delete "${getNoteById(notes, deleteDialog.noteId || '')?.title}"? This action cannot be undone.`}
+        description={`Are you sure you want to delete "${getNoteById(notes, deleteDialog.noteId || "")?.title}"? This action cannot be undone.`}
         onConfirm={handleConfirmDelete}
         confirmText="Delete"
         cancelText="Cancel"

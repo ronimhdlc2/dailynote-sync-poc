@@ -4,6 +4,7 @@ import { google } from 'googleapis';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { GoogleDriveService } from './services/google-drive.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,6 +56,33 @@ ipcMain.handle('google-auth:get-user', async () => {
 
 ipcMain.handle('google-auth:set-credentials', async (event, tokens: any) => {
   oauth2Client.setCredentials(tokens);
+});
+
+let driveService: GoogleDriveService | null = null;
+
+ipcMain.handle('google-drive:init', async () => {
+  driveService = new GoogleDriveService(oauth2Client);
+  return { success: true };
+});
+
+ipcMain.handle('google-drive:ensure-folder', async (event, userEmail: string) => {
+  if (!driveService) throw new Error('Drive service not initialized');
+  return await driveService.ensureUserFolder(userEmail);
+});
+
+ipcMain.handle('google-drive:upload-note', async (event, note: any, folderId: string) => {
+  if (!driveService) throw new Error('Drive service not initialized');
+  return await driveService.uploadNote(note, folderId);
+});
+
+ipcMain.handle('google-drive:download-notes', async (event, folderId: string) => {
+  if (!driveService) throw new Error('Drive service not initialized');
+  return await driveService.downloadAllNotes(folderId);
+});
+
+ipcMain.handle('google-drive:delete-note', async (event, driveFileId: string) => {
+  if (!driveService) throw new Error('Drive service not initialized');
+  return await driveService.deleteNote(driveFileId);
 });
 
 app.whenReady().then(createWindow);

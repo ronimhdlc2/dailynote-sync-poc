@@ -16,19 +16,31 @@ function nowISO(): string {
 }
 
 function makeIdFromTimestamp(iso: string): string {
-  // Example: 2026-01-27T05:41:12.332Z → 2026-01-27_05-41-12
-  return iso
-    .replace('T', '_')
-    .replace(/[:.]/g, '-')
-    .replace('Z', '')
-    .split('.')[0]; // Remove milliseconds
+  const date = new Date(iso);
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  // Format: YYYY-MM-DD_HH-MM-SS (local time)
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
 }
 
 function makeTitleFromTimestamp(iso: string): string {
-  // Example: 2026-01-27T05:41:12.332Z → 2026-01-27 05:41
-  return iso
-    .replace('T', ' ')
-    .slice(0, 16);
+  const date = new Date(iso);
+  
+  // Get local time components
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  // Format: YYYY-MM-DD HH:MM (local time)
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
 // ============================================
@@ -143,31 +155,51 @@ export function formatNoteAsTxt(note: Note): string {
  * Parse TXT content kembali jadi Note object
  * Untuk reading dari Google Drive
  */
-export function parseNoteFromTxt(filename: string, txtContent: string): Note | null {
+export function parseNoteFromTxt(filename: string, content: string): Note | null {
   try {
-    const lines = txtContent.split('\n');
-    const titleMatch = lines[0]?.match(/# Title: (.+)/);
-    const createdMatch = lines[1]?.match(/# Created: (.+)/);
-    const updatedMatch = lines[2]?.match(/# Updated: (.+)/);
+    const lines = content.split('\n');
     
-    if (!titleMatch || !createdMatch || !updatedMatch) {
-      console.error('Invalid TXT format - missing metadata');
+    // More flexible parsing
+    let title = '';
+    let createdAt = '';
+    let updatedAt = '';
+    let contentStartIndex = 0;
+    
+    // Parse metadata lines
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      const line = lines[i].trim();
+      
+      if (line.startsWith('# Title:')) {
+        title = line.replace('# Title:', '').trim();
+      } else if (line.startsWith('# Created:')) {
+        createdAt = line.replace('# Created:', '').trim();
+      } else if (line.startsWith('# Updated:')) {
+        updatedAt = line.replace('# Updated:', '').trim();
+        contentStartIndex = i + 2; // Skip empty line after metadata
+        break;
+      }
+    }
+    
+    // Validate required fields
+    if (!title || !createdAt || !updatedAt) {
+      console.error('Invalid TXT format - missing metadata:', { title, createdAt, updatedAt });
       return null;
     }
     
-    const content = lines.slice(4).join('\n'); // Skip header (3 lines) + empty line
+    // Extract content
+    const noteContent = lines.slice(contentStartIndex).join('\n').trim();
     const id = filename.replace('.txt', '');
     
     return {
       id,
-      title: titleMatch[1],
-      content,
-      createdAt: createdMatch[1],
-      updatedAt: updatedMatch[1],
-      isSynced: true, // Dari Drive = already synced
+      title,
+      content: noteContent,
+      createdAt,
+      updatedAt,
+      isSynced: true,
     };
   } catch (error) {
-    console.error('Failed to parse note:', error);
+    console.error('Parse error for file:', filename, error);
     return null;
   }
 }
