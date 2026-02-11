@@ -1,26 +1,6 @@
 // dekstop/services/google-auth.ts
 // RENDERER PROCESS VERSION - Menggunakan IPC untuk komunikasi dengan main process
-
-export interface UserInfo {
-  id: string;
-  email: string;
-  name: string;
-  photo?: string;
-}
-
-// Declare window.electronAPI type langsung di sini
-declare global {
-  interface Window {
-    electronAPI: {
-      googleAuth: {
-        getAuthUrl: () => Promise<string>;
-        exchangeCode: (code: string) => Promise<any>;
-        getUserInfo: () => Promise<any>;
-        setCredentials: (tokens: any) => Promise<void>;
-      };
-    };
-  }
-}
+import type { UserInfo } from './electron-api';
 
 export const GoogleAuth = {
   // Get authorization URL (via IPC)
