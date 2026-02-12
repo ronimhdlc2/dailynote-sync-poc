@@ -21,9 +21,17 @@ function App() {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Langsung cek authentication saat inisialisasi
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return GoogleAuth.loadTokens();
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const tokensLoaded = await GoogleAuth.loadTokens();
+      if (tokensLoaded) {
+        setIsAuthenticated(true);
+      }
+    };
+    initAuth();
+  }, []);
 
   // Load notes from localStorage
   const [notes, setNotes] = useState<Note[]>(() => {
@@ -153,7 +161,7 @@ function App() {
             );
             
             justUploadedIds.add(note.id);
-            console.log(`✅ Auto-uploaded: ${note.title}`);
+            console.log(`✅ Synced: ${note.title}`);
           } catch (err) {
             console.error(`❌ Failed to auto-upload ${note.title}:`, err);
           }
@@ -189,9 +197,6 @@ function App() {
       localNotes.forEach((n) => {
         if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
           merged.push(n);
-          console.log(
-             `⚠️ Preserving just-uploaded note "${n.title}" (latency protection)`,
-          );
         }
       });
 
@@ -414,12 +419,6 @@ function App() {
       {/* Header - Only show on landing view */}
       {currentView === "landing" && (
         <div className="relative bg-gradient-to-br from-blue-500 to-blue-700 py-4 px-6 text-center shadow-md">
-          <button
-            onClick={handleLogout}
-            className="cursor-pointer absolute top-4 right-6 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-          >
-            Logout
-          </button>
           <h1 className="text-2xl font-bold text-white m-0">
             {getHeaderTitle()}
           </h1>
@@ -434,6 +433,7 @@ function App() {
           <LandingPage
             onCreateNote={handleCreateNote}
             onViewNotes={() => setCurrentView("notes")}
+            onLogout={handleLogout}
           />
         )}
 
@@ -464,6 +464,7 @@ function App() {
               onRefresh={handleAutoSync}
               isSyncing={isSyncing}
               lastSyncTime={lastSyncTime}
+              onLogout={handleLogout}
             />
           </div>
         )}

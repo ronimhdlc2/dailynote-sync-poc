@@ -26,6 +26,8 @@ declare global {
         exchangeCode: (code: string) => Promise<any>;
         getUserInfo: () => Promise<any>;
         setCredentials: (tokens: any) => Promise<void>;
+        encrypt: (text: string) => Promise<string>;
+        decrypt: (encrypted: string) => Promise<string>;
       };
       googleDrive: {
         init: () => Promise<{ success: boolean }>;

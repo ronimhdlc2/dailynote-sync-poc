@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exchangeCode: (code: string) => ipcRenderer.invoke('google-auth:exchange-code', code),
     getUserInfo: () => ipcRenderer.invoke('google-auth:get-user'),
     setCredentials: (tokens: any) => ipcRenderer.invoke('google-auth:set-credentials', tokens),
+    encrypt: (text: string) => ipcRenderer.invoke('google-auth:encrypt', text),
+    decrypt: (encrypted: string) => ipcRenderer.invoke('google-auth:decrypt', encrypted),
   },
   googleDrive: {
     init: () => ipcRenderer.invoke('google-drive:init'),

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { google } from 'googleapis';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -56,6 +56,30 @@ ipcMain.handle('google-auth:get-user', async () => {
 
 ipcMain.handle('google-auth:set-credentials', async (event, tokens: any) => {
   oauth2Client.setCredentials(tokens);
+});
+
+// Encryption handlers
+ipcMain.handle('google-auth:encrypt', (event, plainText: string) => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('Encryption not available on this platform');
+    return plainText;
+  }
+  const encrypted = safeStorage.encryptString(plainText);
+  return encrypted.toString('base64');
+});
+
+ipcMain.handle('google-auth:decrypt', (event, encryptedBase64: string) => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('Decryption not available on this platform');
+    return encryptedBase64;
+  }
+  try {
+    const buffer = Buffer.from(encryptedBase64, 'base64');
+    return safeStorage.decryptString(buffer);
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    return null;
+  }
 });
 
 let driveService: GoogleDriveService | null = null;

@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Eye,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
 import type { Note } from "shared/models/note";
 import {
@@ -31,6 +32,7 @@ interface NotesListProps {
   onRefresh?: () => void; // ← Add this
   isSyncing?: boolean;
   lastSyncTime?: Date | null;
+  onLogout?: () => void;
 }
 
 export default function NotesList({
@@ -42,6 +44,7 @@ export default function NotesList({
   onRefresh,
   isSyncing,
   lastSyncTime,
+  onLogout,
 }: NotesListProps) {
   // State untuk delete confirmation dialog
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -177,6 +180,18 @@ export default function NotesList({
                 <Plus className="w-4 h-4" />
                 New Note
               </button>
+
+              {/* Logout Button */}
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 rounded-xl text-sm font-semibold text-gray-600 transition-all group shadow-sm hover:shadow"
+                  title="Logout from Account"
+                >
+                  <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                  <span>Logout</span>
+                </button>
+              )}
             </div>
           </div>
         </header>

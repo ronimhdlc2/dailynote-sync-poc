@@ -1,14 +1,15 @@
 // Desktop Landing Page - DailyNote POC
 // App-like design with clean, attractive interface
 
-import { BookOpen, Cloud, Smartphone, Lock, RefreshCw } from 'lucide-react';
+import { BookOpen, Cloud, Smartphone, Lock, RefreshCw, LogOut } from 'lucide-react';
 
 interface LandingPageProps {
   onCreateNote: () => void;
   onViewNotes?: () => void;
+  onLogout?: () => void;
 }
 
-export default function LandingPage({ onCreateNote, onViewNotes }: LandingPageProps) {
+export default function LandingPage({ onCreateNote, onViewNotes, onLogout }: LandingPageProps) {
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
       {/* Header */}
@@ -20,7 +21,19 @@ export default function LandingPage({ onCreateNote, onViewNotes }: LandingPagePr
             </div>
             <span className="text-xl font-bold text-gray-900">DailyNote</span>
           </div>
-          <div className="text-sm text-gray-500 font-medium">v1.0 POC</div>
+          
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500 font-medium">v1.0 POC</div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 rounded-lg text-xs font-semibold text-gray-600 transition-all group shadow-sm"
+              >
+                <LogOut className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                <span>Logout</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 

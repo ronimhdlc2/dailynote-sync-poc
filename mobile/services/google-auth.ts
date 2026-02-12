@@ -1,6 +1,7 @@
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from 'expo-secure-store';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -69,11 +70,13 @@ export const GoogleAuth = {
         );
         const userInfo = await userInfoResponse.json();
 
-        // Save to storage
-        await AsyncStorage.setItem(
+        // Save to secure storage
+        await SecureStore.setItemAsync(
           STORAGE_KEY_TOKEN,
           tokenResponse.accessToken,
         );
+        
+        // User info can stay in AsyncStorage as it's less sensitive than the token
         await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(userInfo));
 
         return {
@@ -92,7 +95,7 @@ export const GoogleAuth = {
   },
 
   async isSignedIn(): Promise<boolean> {
-    const token = await AsyncStorage.getItem(STORAGE_KEY_TOKEN);
+    const token = await SecureStore.getItemAsync(STORAGE_KEY_TOKEN);
     return token !== null;
   },
 
@@ -102,12 +105,12 @@ export const GoogleAuth = {
   },
 
   async getAccessToken(): Promise<string | null> {
-    return await AsyncStorage.getItem(STORAGE_KEY_TOKEN);
+    return await SecureStore.getItemAsync(STORAGE_KEY_TOKEN);
   },
 
   async signOut(): Promise<void> {
     try {
-      await AsyncStorage.removeItem(STORAGE_KEY_TOKEN);
+      await SecureStore.deleteItemAsync(STORAGE_KEY_TOKEN);
       await AsyncStorage.removeItem(STORAGE_KEY_USER);
     } catch (error) {
       console.error("Sign out error:", error);
