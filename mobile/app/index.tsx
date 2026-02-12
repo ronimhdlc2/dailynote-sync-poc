@@ -62,7 +62,6 @@ export default function RootHome() {
       if (!token) {
         throw new Error("No access token found. Please login again.");
       }
-      console.log("🔑 Token exists, length:", token.length);
 
       let folderId;
       try {
@@ -82,14 +81,11 @@ export default function RootHome() {
       }
 
       const remoteNotes = await GoogleDriveService.downloadAllNotes(folderId);
-      console.log("📥 Downloaded", remoteNotes.length, "notes from Drive");
 
       const localNotes = await NoteStorage.getNotes();
-      console.log("📱 Found", localNotes.length, "local notes");
 
       const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
       const merged = [...remoteNotes, ...unsyncedLocalNotes];
-      console.log("🔀 Merged to", merged.length, "notes");
 
       // ✅ CLEAR STORAGE DULU
       await AsyncStorage.removeItem("dailynote-notes");
@@ -100,7 +96,6 @@ export default function RootHome() {
 
       const syncTime = new Date().toISOString();
       await AsyncStorage.setItem("last-sync-time", syncTime);
-      console.log("✅ Last sync time saved:", syncTime);
 
       Toast.show({
         type: "success",

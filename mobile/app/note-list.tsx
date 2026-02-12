@@ -20,6 +20,8 @@ import {
   FileText,
   Eye,
   RefreshCw,
+  AlertCircle,
+  LogOut,
 } from "lucide-react-native";
 import type { Note } from "shared/models/note";
 import { GoogleAuth } from "../services/google-auth";
@@ -73,9 +75,6 @@ export default function NotesScreen() {
       const syncTimeStr = await AsyncStorage.getItem("last-sync-time");
       if (syncTimeStr) {
         setLastSyncTime(new Date(syncTimeStr));
-        console.log("✅ Last sync time loaded:", syncTimeStr);
-      } else {
-        console.log("⚠️ No last sync time found");
       }
     } catch (error) {
       console.error("Load sync time error:", error);
@@ -138,7 +137,7 @@ export default function NotesScreen() {
             const updatedNote = { ...note, driveFileId, isSynced: true };
             await NoteStorage.saveNote(updatedNote);
             justUploadedIds.add(note.id); // Track success upload
-            console.log(`✅ Uploaded: ${note.title}`);
+            console.log(`✅ Synced: ${note.title}`);
           } catch (err) {
             console.error(`❌ Failed to upload ${note.title}:`, err);
             // Ignore error, will retry next time
@@ -148,11 +147,9 @@ export default function NotesScreen() {
 
       // 2. Download notes from Google Drive
       const remoteNotes = await GoogleDriveService.downloadAllNotes(folderId);
-      console.log("📥 Downloaded", remoteNotes.length, "notes from Drive");
 
       // 3. Get updated local notes
       const localNotes = await NoteStorage.getNotes();
-      console.log("📱 Found", localNotes.length, "local notes");
 
       // Filter local notes: hanya ambil yang belum sync (gagal upload)
       const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
@@ -166,12 +163,9 @@ export default function NotesScreen() {
         if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
           merged.push(n);
           console.log(
-            `⚠️ Preserving just-uploaded note "${n.title}" (latency protection)`,
           );
         }
       });
-
-      console.log("🔀 Merged to", merged.length, "notes");
 
       // ✅ CLEAR STORAGE DULU, LALU SAVE MERGED
       await AsyncStorage.removeItem("dailynote-notes");
@@ -185,7 +179,6 @@ export default function NotesScreen() {
       const syncTime = new Date();
       setLastSyncTime(syncTime);
       await AsyncStorage.setItem("last-sync-time", syncTime.toISOString());
-      console.log("✅ Last sync time updated:", syncTime.toISOString());
 
       Toast.show({
         type: "success",
@@ -424,10 +417,11 @@ export default function NotesScreen() {
                 </View>
 
                 {/* Logout Button */}
-                <TouchableOpacity onPress={handleLogout}>
-                  <Text className="text-sm text-red-600 font-semibold">
-                    Logout
-                  </Text>
+                <TouchableOpacity 
+                   onPress={handleLogout}
+                   className="p-2 bg-red-50 rounded-lg border border-red-100 active:opacity-70"
+                >
+                  <LogOut color="#dc2626" size={18} />
                 </TouchableOpacity>
               </View>
             </View>

@@ -11,16 +11,32 @@ export const GoogleAuth = {
   // Exchange code for tokens (via IPC)
   async getTokensFromCode(code: string): Promise<void> {
     const tokens = await window.electronAPI.googleAuth.exchangeCode(code);
-    localStorage.setItem('google-tokens', JSON.stringify(tokens));
+    const tokensJson = JSON.stringify(tokens);
+    const encrypted = await window.electronAPI.googleAuth.encrypt(tokensJson);
+    localStorage.setItem('google-tokens-encrypted', encrypted);
+    localStorage.removeItem('google-tokens'); // Hapus yang tidak terenkripsi
   },
 
   // Load tokens from storage
-  loadTokens(): boolean {
-    const tokensJson = localStorage.getItem('google-tokens');
+  async loadTokens(): Promise<boolean> {
+    let tokensJson = localStorage.getItem('google-tokens-encrypted');
+    
     if (tokensJson) {
-      const tokens = JSON.parse(tokensJson);
-      window.electronAPI.googleAuth.setCredentials(tokens);
-      return true;
+      tokensJson = await window.electronAPI.googleAuth.decrypt(tokensJson);
+    } else {
+      // Fallback untuk catatan lama (un-encrypted)
+      tokensJson = localStorage.getItem('google-tokens');
+    }
+
+    if (tokensJson) {
+      try {
+        const tokens = JSON.parse(tokensJson);
+        window.electronAPI.googleAuth.setCredentials(tokens);
+        return true;
+      } catch (e) {
+        console.error('Failed to parse tokens:', e);
+        return false;
+      }
     }
     return false;
   },
@@ -43,6 +59,7 @@ export const GoogleAuth = {
 
   // Sign out
   signOut(): void {
+    localStorage.removeItem('google-tokens-encrypted');
     localStorage.removeItem('google-tokens');
   },
 

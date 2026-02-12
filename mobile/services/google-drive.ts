@@ -17,11 +17,9 @@ export class GoogleDriveService {
       
       // 1. Find or create "DailyNotes" folder
       const dailyNotesFolderId = await this.findOrCreateFolder('DailyNotes', 'root', token);
-      console.log('✅ DailyNotes folder ID:', dailyNotesFolderId);
       
       // 2. Find or create user folder inside DailyNotes
       const userFolderId = await this.findOrCreateFolder(userEmail, dailyNotesFolderId, token);
-      console.log('✅ User folder ID:', userFolderId);
       
       return userFolderId;
     } catch (error) {
@@ -49,7 +47,6 @@ export class GoogleDriveService {
       const searchData = await searchResponse.json();
       
       if (searchData.files && searchData.files.length > 0) {
-        console.log('✅ Found existing folder:', searchData.files[0].id);
         return searchData.files[0].id;
       }
       
@@ -74,7 +71,7 @@ export class GoogleDriveService {
       }
       
       const createData = await createResponse.json();
-      console.log('✅ Created new folder:', createData.id);
+      console.log(`✅ Created folder: ${folderName}`);
       
       return createData.id;
     } catch (error) {
@@ -113,7 +110,7 @@ export class GoogleDriveService {
           throw new Error(`Update failed: ${response.status} - ${errorText}`);
         }
         
-        console.log('✅ Updated file:', existingFileId);
+        console.log(`✅ Updated note: ${note.title}`);
         return existingFileId;
       } else {
         // Create new file
@@ -153,7 +150,7 @@ export class GoogleDriveService {
         }
         
         const data = await response.json();
-        console.log('✅ Created file:', data.id);
+        console.log(`✅ Created note: ${note.title}`);
         
         return data.id;
       }
@@ -199,7 +196,6 @@ export class GoogleDriveService {
             note.driveFileId = file.id;
             note.isSynced = true;
             notes.push(note);
-            console.log('✅ Parsed note:', file.name);
           } else {
             console.warn('⚠️ Failed to parse file:', file.name);
           }
@@ -208,7 +204,7 @@ export class GoogleDriveService {
         }
       }
       
-      console.log('✅ Downloaded', notes.length, 'notes');
+      console.log(`✅ Synced ${notes.length} notes from Drive`);
       return notes;
     } catch (error) {
       console.error('❌ downloadAllNotes error:', error);
@@ -234,7 +230,7 @@ export class GoogleDriveService {
         throw new Error(`Delete failed: ${response.status} - ${errorText}`);
       }
       
-      console.log('✅ Deleted file:', driveFileId);
+      console.log('✅ Deleted note from Drive');
     } catch (error) {
       console.error('❌ deleteNote error:', error);
       throw error;
