@@ -36,6 +36,12 @@ declare global {
         downloadNotes: (folderId: string) => Promise<Note[]>;
         deleteNote: (driveFileId: string) => Promise<void>;
       };
+      fileSystem: {
+        selectFolder: () => Promise<string | null>;
+        readNotes: (folderPath: string) => Promise<Note[]>;
+        writeNote: (folderPath: string, note: Note) => Promise<void>;
+        deleteNote: (folderPath: string, noteId: string) => Promise<void>;
+      };
     };
   }
 }

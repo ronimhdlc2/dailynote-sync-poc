@@ -16,4 +16,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     downloadNotes: (folderId: string) => ipcRenderer.invoke('google-drive:download-notes', folderId),
     deleteNote: (driveFileId: string) => ipcRenderer.invoke('google-drive:delete-note', driveFileId),
   },
+  fileSystem: {
+    selectFolder: () => ipcRenderer.invoke('file-system:select-folder'),
+    readNotes: (folderPath: string) => ipcRenderer.invoke('file-system:read-notes', folderPath),
+    writeNote: (folderPath: string, note: any) => ipcRenderer.invoke('file-system:write-note', folderPath, note),
+    deleteNote: (folderPath: string, noteId: string) => ipcRenderer.invoke('file-system:delete-note', folderPath, noteId),
+  }
 });

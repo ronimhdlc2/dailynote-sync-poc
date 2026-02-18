@@ -1,13 +1,22 @@
-import 'dotenv/config';
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import dotenv from 'dotenv';
+import { app, BrowserWindow, ipcMain, safeStorage, dialog } from 'electron';
 import { google } from 'googleapis';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { GoogleDriveService } from './services/google-drive.js';
+import fs from 'fs';
+import fsPromises from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load .env manually to handle packaged app
+if (app.isPackaged) {
+  dotenv.config({ path: path.join(__dirname, '../.env') });
+} else {
+  dotenv.config();
+}
 
 const CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.VITE_GOOGLE_CLIENT_SECRET || '';
@@ -30,8 +39,31 @@ function createWindow() {
     },
   });
 
-  win.loadURL('http://localhost:5173');
-  win.webContents.openDevTools();
+  if (app.isPackaged) {
+    win.loadFile(path.join(__dirname, '../renderer/dist/index.html'));
+  } else {
+    win.loadURL('http://localhost:5173');
+    win.webContents.openDevTools();
+  }
+
+  // Intercept Google Auth redirect in production
+  win.webContents.on('will-redirect', (event, url) => {
+    if (url.startsWith('http://localhost:5173/callback')) {
+      event.preventDefault();
+      const parsedUrl = new URL(url);
+      const code = parsedUrl.searchParams.get('code');
+      
+      if (code) {
+        if (app.isPackaged) {
+          win.loadFile(path.join(__dirname, '../renderer/dist/index.html'), {
+            search: `code=${code}`
+          });
+        } else {
+          win.loadURL(`http://localhost:5173/callback?code=${code}`);
+        }
+      }
+    }
+  });
 }
 
 // IPC Handlers untuk Google Auth
@@ -107,6 +139,63 @@ ipcMain.handle('google-drive:download-notes', async (event, folderId: string) =>
 ipcMain.handle('google-drive:delete-note', async (event, driveFileId: string) => {
   if (!driveService) throw new Error('Drive service not initialized');
   return await driveService.deleteNote(driveFileId);
+});
+
+// --- FILE SYSTEM HANDLERS ---
+ipcMain.handle('file-system:select-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('file-system:read-notes', async (event, folderPath: string) => {
+  try {
+    const files = await fsPromises.readdir(folderPath);
+    const txtFiles = files.filter(f => f.endsWith('.txt'));
+    
+    const notes = [];
+    for (const filename of txtFiles) {
+      const content = await fsPromises.readFile(path.join(folderPath, filename), 'utf8');
+      const lines = content.split('\n');
+      const title = lines[0]?.match(/# Title: (.+)/)?.[1];
+      const createdAt = lines[1]?.match(/# Created: (.+)/)?.[1];
+      const updatedAt = lines[2]?.match(/# Updated: (.+)/)?.[1];
+      const noteContent = lines.slice(4).join('\n');
+      
+      if (title && createdAt && updatedAt) {
+        notes.push({
+          id: filename.replace('.txt', ''),
+          title,
+          content: noteContent,
+          createdAt,
+          updatedAt,
+          isSynced: true,
+        });
+      }
+    }
+    return notes;
+  } catch (error) {
+    console.error('Read notes error:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('file-system:write-note', async (event, folderPath: string, note: any) => {
+  const filename = `${note.id}.txt`;
+  const content = `# Title: ${note.title}\n# Created: ${note.createdAt}\n# Updated: ${note.updatedAt}\n\n${note.content}`;
+  await fsPromises.writeFile(path.join(folderPath, filename), content, 'utf8');
+  return true;
+});
+
+ipcMain.handle('file-system:delete-note', async (event, folderPath: string, noteId: string) => {
+  const filename = `${noteId}.txt`;
+  const filePath = path.join(folderPath, filename);
+  if (fs.existsSync(filePath)) {
+    await fsPromises.unlink(filePath);
+  }
+  return true;
 });
 
 app.whenReady().then(createWindow);
