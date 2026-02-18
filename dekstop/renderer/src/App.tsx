@@ -19,6 +19,7 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const isInitializing = useRef(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [localFolderPath, setLocalFolderPath] = useState<string | null>(localStorage.getItem("dailynote-local-path"));
 
   // Langsung cek authentication saat inisialisasi
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,17 +34,40 @@ function App() {
     initAuth();
   }, []);
 
-  // Load notes from localStorage
-  const [notes, setNotes] = useState<Note[]>(() => {
-    try {
-      const saved = localStorage.getItem("dailynote-notes");
-      // Ensure notes are sorted on load
-      return saved ? getNotesSorted(JSON.parse(saved)) : [];
-    } catch (e) {
-      console.error("Failed to load notes:", e);
-      return [];
+  // Notes state
+  const [notes, setNotes] = useState<Note[]>([]);
+
+  // Load notes when localFolderPath is set
+  useEffect(() => {
+    if (localFolderPath) {
+      loadNotesFromFS();
     }
-  });
+  }, [localFolderPath]);
+
+  const loadNotesFromFS = async () => {
+    if (!localFolderPath) return;
+    try {
+      const fsNotes = await window.electronAPI.fileSystem.readNotes(localFolderPath);
+      setNotes(getNotesSorted(fsNotes));
+    } catch (error) {
+      console.error("Failed to load notes from FS:", error);
+      toast.error("Gagal membaca folder penyimpanan");
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    const path = await window.electronAPI.fileSystem.selectFolder();
+    if (path) {
+      setLocalFolderPath(path);
+      localStorage.setItem("dailynote-local-path", path);
+      toast.success("Lokasi penyimpanan diatur", {
+        description: path
+      });
+      
+      // Jika ada catatan di localStorage lama, tawarkan migrasi atau biarkan saja
+      // Untuk saat ini kita prioritaskan folder baru
+    }
+  };
 
   // Initialize Google Drive when authenticated
   useEffect(() => {
@@ -106,7 +130,8 @@ function App() {
       const remoteNotes =
         await window.electronAPI.googleDrive.downloadNotes(folderId);
 
-      // Merge with local notes (latest timestamp wins)
+      // Merge Logic (Remote + Local FS)
+      // Remote is secondary if local exists, but we merge for initial sync
       const merged = [...notes, ...remoteNotes].reduce((acc, note) => {
         const existing = acc.find((n) => n.id === note.id);
         if (!existing) {
@@ -117,7 +142,7 @@ function App() {
         return acc;
       }, [] as Note[]);
 
-      saveNotesToStorage(merged);
+      await saveNotesToStorage(merged);
       setLastSyncTime(new Date());
       toast.success("Synced with Google Drive");
     } catch (error) {
@@ -135,10 +160,11 @@ function App() {
 
     try {
       setIsSyncing(true);
+      // 0. Refresh from FS to detect manual deletions/changes
+      const currentLocalNotes = await refreshNotesFromFS();
 
       // 1. Upload unsynced local notes FIRST
-      // Ini memastikan offline edits dikirim ke cloud sebelum sync download
-      const unsyncedToUpload = notes.filter((n) => !n.isSynced);
+      const unsyncedToUpload = currentLocalNotes.filter((n) => !n.isSynced);
       const justUploadedIds = new Set<string>();
       let updatedNotesAfterUpload = [...notes];
 
@@ -175,38 +201,41 @@ function App() {
       }
 
       // 2. Download remote notes
-      const remoteNotes =
-        await window.electronAPI.googleDrive.downloadNotes(userFolderId);
+      const remoteNotes = await window.electronAPI.googleDrive.downloadNotes(userFolderId!);
 
-      // ✅ PERBAIKAN: REPLACE LOCAL DENGAN REMOTE
-      // Remote adalah source of truth
-      // Jika note ada di local tapi tidak ada di remote = sudah dihapus
+      // 3. Handle Manual Deletions (Supervisor Directive: Restore from Drive)
+      // Jika note ada di drive tapi tidak ada di local FS, kita DOWNLOAD ulang.
+      // KECUALI jika note tersebut ada di suppression list (berarti baru saja dihapus via app)
+      const suppressedIds = JSON.parse(localStorage.getItem("dailynote-suppressed-ids") || "[]");
+      const localIds = new Set(currentLocalNotes.map(n => n.id));
+      
+      const remoteToRestore = remoteNotes.filter(rn => !localIds.has(rn.id) && !suppressedIds.includes(rn.id));
+      
+      if (remoteToRestore.length > 0) {
+        console.log(`📥 Restoring ${remoteToRestore.length} notes missing from local folder`);
+      }
 
-      // use latest local state (which might have just been updated)
-      const localNotes = updatedNotesAfterUpload;
-
-      // Filter local notes: hanya ambil yang belum sync (isSynced = false)
-      // Notes yang sudah sync tapi tidak ada di remote = sudah dihapus
-      const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
-
-      // Combine: remote notes + unsynced local notes
-      const merged = [...remoteNotes, ...unsyncedLocalNotes];
-
-      // 3. Latency Protection: Add just-uploaded notes if missing from remote
-      const remoteIds = new Set(remoteNotes.map((n) => n.id));
-      localNotes.forEach((n) => {
-        if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
-          merged.push(n);
+      // Merge: remote notes + unsynced local notes
+      // Logic: Remote is priority, tapi abaikan yang di-suppress
+      const filteredRemote = remoteNotes.filter(rn => !suppressedIds.includes(rn.id));
+      
+      const merged = [...filteredRemote, ...unsyncedToUpload].reduce((acc, note) => {
+        const existing = acc.find((n) => n.id === note.id);
+        if (!existing) {
+          acc.push(note);
+        } else if (new Date(note.updatedAt) > new Date(existing.updatedAt)) {
+          acc = acc.map((n) => (n.id === note.id ? note : n));
         }
-      });
+        return acc;
+      }, [] as Note[]);
 
       // Check if there are changes
-      const hasChanges =
-        JSON.stringify(getNotesSorted(notes)) !==
-        JSON.stringify(getNotesSorted(merged));
+      const currentNotesSorted = getNotesSorted(notes);
+      const mergedSorted = getNotesSorted(merged);
+      const hasChanges = JSON.stringify(currentNotesSorted) !== JSON.stringify(mergedSorted);
 
       if (hasChanges) {
-        saveNotesToStorage(getNotesSorted(merged));
+        await saveNotesToStorage(mergedSorted);
         setLastSyncTime(new Date());
         toast.success("Synced with Google Drive");
       } else {
@@ -216,6 +245,19 @@ function App() {
       console.error("❌ Auto-sync error:", error);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const refreshNotesFromFS = async () => {
+    if (!localFolderPath) return notes;
+    try {
+      const fsNotes = await window.electronAPI.fileSystem.readNotes(localFolderPath);
+      const sorted = getNotesSorted(fsNotes);
+      setNotes(sorted);
+      return sorted;
+    } catch (e) {
+      console.error("Failed to refresh notes from FS:", e);
+      return notes;
     }
   };
 
@@ -253,10 +295,26 @@ function App() {
     return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
-  // Save to localStorage whenever notes change
-  const saveNotesToStorage = (updatedNotes: Note[]) => {
+  // Save to File System and update state
+  const saveNotesToStorage = async (updatedNotes: Note[]) => {
+    // Detect deletions: notes that are in state but not in updatedNotes
+    const deletedIds = notes
+      .filter(n => !updatedNotes.find(un => un.id === n.id))
+      .map(n => n.id);
+
     setNotes(updatedNotes);
-    localStorage.setItem("dailynote-notes", JSON.stringify(updatedNotes));
+    
+    if (localFolderPath) {
+      // Delete removed notes
+      for (const id of deletedIds) {
+        await window.electronAPI.fileSystem.deleteNote(localFolderPath, id);
+      }
+      
+      // Write/Update remaining notes
+      for (const note of updatedNotes) {
+        await window.electronAPI.fileSystem.writeNote(localFolderPath, note);
+      }
+    }
   };
 
   const handleCreateNote = () => {
@@ -283,8 +341,8 @@ function App() {
   }
 
   // ✅ PERBAIKAN: JANGAN CLOSE EDITOR DULU
-  // Save to local storage first
-  saveNotesToStorage(getNotesSorted(updatedNotes));
+  // Save to local FS first
+  await saveNotesToStorage(getNotesSorted(updatedNotes));
 
   // ✅ VARIABLE UNTUK TRACK NOTE YANG AKAN DI-VIEW
   let finalNote = note;
@@ -325,20 +383,34 @@ function App() {
 };
 
   const handleDeleteNote = async (noteId: string) => {
+    // 1. Add to suppression list immediately
+    const suppressed = JSON.parse(localStorage.getItem("dailynote-suppressed-ids") || "[]");
+    localStorage.setItem("dailynote-suppressed-ids", JSON.stringify([...suppressed, noteId]));
+
     const noteToDelete = notes.find((n) => n.id === noteId);
     const updatedNotes = deleteNote(notes, noteId);
-    saveNotesToStorage(updatedNotes);
+    await saveNotesToStorage(updatedNotes);
 
-    // Delete from Google Drive if it has driveFileId
+    // 2. Delete from local file system
+    if (localFolderPath) {
+      await window.electronAPI.fileSystem.deleteNote(localFolderPath, noteId);
+    }
+
+    // 3. Delete from Google Drive if it has driveFileId
     if (noteToDelete?.driveFileId && userFolderId) {
       try {
         await window.electronAPI.googleDrive.deleteNote(
           noteToDelete.driveFileId,
         );
+        
+        // 4. Clean up suppression list on success
+        const currentSuppressed = JSON.parse(localStorage.getItem("dailynote-suppressed-ids") || "[]");
+        localStorage.setItem("dailynote-suppressed-ids", JSON.stringify(currentSuppressed.filter((id: string) => id !== noteId)));
+        
         toast.success("Deleted from Google Drive");
       } catch (error) {
         console.error("Delete from Drive error:", error);
-        toast.error("Failed to delete from Google Drive");
+        toast.error("Failed to delete from Google Drive, will stay suppressed from sync");
       }
     }
   };
@@ -434,6 +506,8 @@ function App() {
             onCreateNote={handleCreateNote}
             onViewNotes={() => setCurrentView("notes")}
             onLogout={handleLogout}
+            onSelectFolder={handleSelectFolder}
+            storagePath={localFolderPath}
           />
         )}
 

@@ -115,8 +115,11 @@ export default function NotesScreen() {
       console.log("🔄 Syncing with Google Drive...");
 
       // 1. Upload unsynced local notes FIRST
-      const initialLocalNotes = await NoteStorage.getNotes();
-      const unsyncedToUpload = initialLocalNotes.filter((n) => !n.isSynced);
+      // 🔄 Refresh local notes first to detect manual deletions
+      await loadNotes();
+      const currentLocalNotes = await NoteStorage.getNotes(); 
+
+      const unsyncedToUpload = currentLocalNotes.filter((n) => !n.isSynced);
       const justUploadedIds = new Set<string>();
 
       if (unsyncedToUpload.length > 0) {
@@ -145,30 +148,40 @@ export default function NotesScreen() {
         }
       }
 
+      // 🔄 DETEKSI DELETE MANUAL LOKAL DIHAPUS (REVERTED AS PER SUPERVISOR)
+      // Kita tidak lagi menghapus di Drive jika file lokal hilang manual.
+      // Sebaliknya, file akan di-download ulang (merged).
+
       // 2. Download notes from Google Drive
       const remoteNotes = await GoogleDriveService.downloadAllNotes(folderId);
+      const suppressedIdsStr = await AsyncStorage.getItem("dailynote-suppressed-ids");
+      const suppressedIds = suppressedIdsStr ? JSON.parse(suppressedIdsStr) : [];
 
       // 3. Get updated local notes
-      const localNotes = await NoteStorage.getNotes();
+      const localNotesAfterUpload = await NoteStorage.getNotes();
+      const unsyncedLocalNotes = localNotesAfterUpload.filter((n) => !n.isSynced);
 
-      // Filter local notes: hanya ambil yang belum sync (gagal upload)
-      const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
-
-      // Combine: remote notes + unsynced local notes
-      const merged = [...remoteNotes, ...unsyncedLocalNotes];
+      // Merge: remote notes + unsynced local notes
+      // Remote is priority, tapi abaikan yang di-suppress
+      const filteredRemote = remoteNotes.filter(rn => !suppressedIds.includes(rn.id));
+      
+      const merged = [...filteredRemote, ...unsyncedLocalNotes].reduce((acc, note) => {
+        const existing = acc.find((n) => n.id === note.id);
+        if (!existing) {
+          acc.push(note);
+        } else if (new Date(note.updatedAt) > new Date(existing.updatedAt)) {
+          acc = acc.map((n) => (n.id === note.id ? note : n));
+        }
+        return acc;
+      }, [] as Note[]);
 
       // 4. Latency Protection: Add just-uploaded notes if missing from remote
       const remoteIds = new Set(remoteNotes.map((n) => n.id));
-      localNotes.forEach((n) => {
+      localNotesAfterUpload.forEach((n) => {
         if (n.isSynced && justUploadedIds.has(n.id) && !remoteIds.has(n.id)) {
           merged.push(n);
-          console.log(
-          );
         }
       });
-
-      // ✅ CLEAR STORAGE DULU, LALU SAVE MERGED
-      await AsyncStorage.removeItem("dailynote-notes");
 
       for (const note of merged) {
         await NoteStorage.saveNote(note);
@@ -222,17 +235,27 @@ export default function NotesScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // Delete from local storage
+              // 1. Add to suppression list
+              const suppressedStr = await AsyncStorage.getItem("dailynote-suppressed-ids");
+              const suppressed = suppressedStr ? JSON.parse(suppressedStr) : [];
+              await AsyncStorage.setItem("dailynote-suppressed-ids", JSON.stringify([...suppressed, noteId]));
+
+              // 2. Delete from local storage
               await NoteStorage.deleteNote(noteId);
 
-              // Try to delete from Google Drive
+              // 3. Try to delete from Google Drive
               if (note?.driveFileId) {
                 try {
                   await GoogleDriveService.deleteNote(note.driveFileId);
 
+                  // 4. Clean up suppression on success
+                  const currentSuppressedStr = await AsyncStorage.getItem("dailynote-suppressed-ids");
+                  const currentSuppressed = currentSuppressedStr ? JSON.parse(currentSuppressedStr) : [];
+                  await AsyncStorage.setItem("dailynote-suppressed-ids", JSON.stringify(currentSuppressed.filter((id: string) => id !== noteId)));
+
                   const syncTime = new Date().toISOString();
                   await AsyncStorage.setItem("last-sync-time", syncTime);
-
+                  
                   Toast.show({
                     type: "success",
                     text1: "Note deleted",

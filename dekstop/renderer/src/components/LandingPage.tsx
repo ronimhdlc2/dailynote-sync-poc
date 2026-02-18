@@ -7,9 +7,11 @@ interface LandingPageProps {
   onCreateNote: () => void;
   onViewNotes?: () => void;
   onLogout?: () => void;
+  onSelectFolder: () => void;
+  storagePath: string | null;
 }
 
-export default function LandingPage({ onCreateNote, onViewNotes, onLogout }: LandingPageProps) {
+export default function LandingPage({ onCreateNote, onViewNotes, onLogout, onSelectFolder, storagePath }: LandingPageProps) {
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
       {/* Header */}
@@ -58,15 +60,25 @@ export default function LandingPage({ onCreateNote, onViewNotes, onLogout }: Lan
             </p>
   
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <button
-                onClick={onCreateNote}
-                className="cursor-pointer inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all"
-              >
-                <BookOpen className="w-5 h-5" />
-                Mulai Menulis Sekarang
-              </button>
-  
-              {onViewNotes && (
+              {!storagePath ? (
+                <button
+                  onClick={onSelectFolder}
+                  className="cursor-pointer inline-flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all group"
+                >
+                  <RefreshCw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-700" />
+                  Pilih Lokasi Penyimpanan
+                </button>
+              ) : (
+                <button
+                  onClick={onCreateNote}
+                  className="cursor-pointer inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all"
+                >
+                  <BookOpen className="w-5 h-5" />
+                  Mulai Menulis Sekarang
+                </button>
+              )}
+   
+              {onViewNotes && storagePath && (
                 <button
                   onClick={onViewNotes}
                   className="cursor-pointer inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-blue-600 border-2 border-blue-600 px-8 py-3.5 rounded-xl text-lg font-semibold shadow-lg shadow-blue-600/30 hover:shadow-xl hover:shadow-blue-600/40 hover:scale-102 duration-500 transition-all"
@@ -75,6 +87,20 @@ export default function LandingPage({ onCreateNote, onViewNotes, onLogout }: Lan
                 </button>
               )}
             </div>
+            
+            {storagePath && (
+              <div className="mt-6 flex items-center justify-center gap-2 text-sm text-gray-500 bg-gray-100/50 w-fit mx-auto px-4 py-2 rounded-full border border-gray-200">
+                <Cloud className="w-4 h-4 text-blue-500" />
+                <span>Penyimpanan: </span>
+                <span className="font-mono text-gray-700 truncate max-w-xs">{storagePath}</span>
+                <button 
+                  onClick={onSelectFolder}
+                  className="ml-2 text-blue-600 hover:underline font-medium"
+                >
+                  Ubah
+                </button>
+              </div>
+            )}
           </div>
   
           {/* Preview Card */}

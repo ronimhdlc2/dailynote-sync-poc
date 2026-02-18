@@ -1,13 +1,14 @@
 {
   "name": "dekstop",
   "version": "1.0.0",
-  "description": "",
+  "description": "DailyNote POC Desktop Application",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc && tsc preload.ts --outDir dist",
     "start": "npm run build && electron .",
     "dev": "vite",
+    "dist": "npm run build && electron-builder build --win",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,7 +16,6 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.2.4",
-    "electron": "^40.0.0",
     "googleapis": "^171.4.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -23,6 +23,28 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.2",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.7.0",
     "vite": "^7.3.1"
+  },
+  "build": {
+    "appId": "com.dailynote.poc",
+    "productName": "DailyNote",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "renderer/dist/**/*",
+      "package.json",
+      ".env"
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

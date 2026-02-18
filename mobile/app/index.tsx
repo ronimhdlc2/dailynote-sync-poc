@@ -1,6 +1,6 @@
 // mobile/app/index.tsx
 import { View, Text, TouchableOpacity, ScrollView, Alert } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   BookOpen,
@@ -11,13 +11,15 @@ import {
   LogOut, // ← TAMBAHKAN INI
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { GoogleAuth } from "../services/google-auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GoogleDriveService } from "../services/google-drive";
 import { NoteStorage } from "../services/storage";
 import { mergeNotes } from "shared/core/note-engine";
 import Toast from "react-native-toast-message";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from 'expo-file-system/legacy';
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -29,25 +31,109 @@ export default function RootHome() {
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [storagePath, setStoragePath] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  // Cek auth setiap kali halaman difokuskan (termasuk setelah login redirect)
+  useFocusEffect(
+    useCallback(() => {
+      setIsChecking(true);
+      checkAuth();
+    }, [])
+  );
+
+  const loadStoragePath = async () => {
+    const path = await NoteStorage.getStoragePath();
+    setStoragePath(path);
+  };
+
 
   const checkAuth = async () => {
+    console.log("[DEBUG] checkAuth: Checking if user is signed in...");
     const isSignedIn = await GoogleAuth.isSignedIn();
+    
     if (!isSignedIn) {
+      console.log("[DEBUG] checkAuth: User not signed in, redirecting to /auth");
       router.replace("/auth");
       setIsChecking(false);
       return;
     }
 
-    await initializeSync();
+    console.log("[DEBUG] checkAuth: User is signed in, loading storage path...");
+    const path = await NoteStorage.getStoragePath();
+    console.log("[DEBUG] checkAuth: Path from storage:", path);
+    setStoragePath(path);
+    
+    if (path) {
+      console.log("[DEBUG] checkAuth: Path exists, initializing sync...");
+      await initializeSync();
+    } else {
+      console.log("[DEBUG] checkAuth: No path configured yet.");
+    }
+    
     setIsChecking(false);
+  };
+
+  const handleSelectFolder = async () => {
+    try {
+      // 1. Request Permission & Select Folder (Android SAF)
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      
+      if (permissions.granted) {
+        const folderUri = permissions.directoryUri;
+        await NoteStorage.setStoragePath(folderUri);
+        setStoragePath(folderUri);
+        
+        Toast.show({
+          type: "success",
+          text1: "Folder penyimpanan diatur",
+          text2: "Akses folder berhasil diberikan",
+        });
+        
+        // Mulai sync setelah folder diatur
+        initializeSync();
+      } else {
+        Toast.show({
+          type: "info",
+          text1: "Izin ditolak",
+          text2: "Aplikasi butuh akses folder untuk menyimpan catatan",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to select folder:", err);
+      // Fallback ke DocumentPicker jika SAF tidak tersedia (misal di iOS/Web)
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: "*/*",
+          copyToCacheDirectory: false,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const fileUri = result.assets[0].uri;
+          const lastSlash = fileUri.lastIndexOf("/");
+          const folderUri = fileUri.substring(0, lastSlash);
+          
+          await NoteStorage.setStoragePath(folderUri);
+          setStoragePath(folderUri);
+          initializeSync();
+        }
+      } catch (e) {
+        Toast.show({
+          type: "error",
+          text1: "Selection failed",
+          text2: getErrorMessage(err),
+        });
+      }
+    }
   };
 
   const initializeSync = async () => {
     try {
+      const storedPath = await NoteStorage.getStoragePath();
+      if (!storedPath) {
+        console.log("⚠️ Storage folder not configured, skipping sync");
+        return;
+      }
+
       setIsSyncing(true);
 
       const user = await GoogleAuth.getCurrentUser();
@@ -86,9 +172,6 @@ export default function RootHome() {
 
       const unsyncedLocalNotes = localNotes.filter((n) => !n.isSynced);
       const merged = [...remoteNotes, ...unsyncedLocalNotes];
-
-      // ✅ CLEAR STORAGE DULU
-      await AsyncStorage.removeItem("dailynote-notes");
 
       for (const note of merged) {
         await NoteStorage.saveNote(note);
@@ -135,11 +218,11 @@ export default function RootHome() {
         style: "destructive",
         onPress: async () => {
           try {
-            // Clear Google auth
+            // Clear specific project keys only, keep storage path!
             await GoogleAuth.signOut();
-
-            // Clear AsyncStorage
-            await AsyncStorage.clear();
+            await AsyncStorage.removeItem("drive-folder-id");
+            await AsyncStorage.removeItem("last-sync-time");
+            await AsyncStorage.removeItem("dailynote-suppressed-ids");
 
             Toast.show({
               type: "success",
@@ -238,24 +321,48 @@ export default function RootHome() {
 
             {/* CTA Buttons */}
             <View className="gap-3 w-full px-4">
-              <TouchableOpacity
-                className="flex-row items-center justify-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
-                onPress={() => router.push("/note-editor")}
-              >
-                <BookOpen color="white" size={20} />
-                <Text className="text-lg font-semibold text-white">
-                  Mulai Menulis Sekarang
-                </Text>
-              </TouchableOpacity>
+              {!storagePath ? (
+                <TouchableOpacity
+                  className="flex-row items-center justify-center gap-3 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
+                  onPress={handleSelectFolder}
+                >
+                  <RefreshCw color="white" size={20} />
+                  <Text className="text-lg font-semibold text-white">
+                    Pilih Lokasi Penyimpanan
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    className="flex-row items-center justify-center gap-2 bg-blue-600 px-8 py-4 rounded-xl shadow-lg active:opacity-80"
+                    onPress={() => router.push("/note-editor")}
+                  >
+                    <BookOpen color="white" size={20} />
+                    <Text className="text-lg font-semibold text-white">
+                      Mulai Menulis Sekarang
+                    </Text>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                className="flex-row items-center justify-center gap-2 bg-white border-2 border-blue-600 px-8 py-4 rounded-xl active:opacity-80"
-                onPress={() => router.push("/note-list")}
-              >
-                <Text className="text-lg font-semibold text-blue-600">
-                  Lihat Catatan Saya
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    className="flex-row items-center justify-center gap-2 bg-white border-2 border-blue-600 px-8 py-4 rounded-xl active:opacity-80"
+                    onPress={() => router.push("/note-list")}
+                  >
+                    <Text className="text-lg font-semibold text-blue-600">
+                      Lihat Catatan Saya
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <View className="mt-4 flex-row items-center justify-center gap-2 bg-gray-100 rounded-full px-4 py-2 border border-gray-200">
+                    <Cloud color="#3b82f6" size={14} />
+                    <Text className="text-xs text-gray-500 italic flex-1" numberOfLines={1}>
+                      Lokal: {storagePath}
+                    </Text>
+                    <TouchableOpacity onPress={handleSelectFolder}>
+                      <Text className="text-xs font-bold text-blue-600">Ubah</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
 

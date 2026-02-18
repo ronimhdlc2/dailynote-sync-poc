@@ -23,7 +23,10 @@ export default function AuthScreen() {
         position: 'top',
       });
       
-      // Navigate to notes list
+      // Beri waktu SecureStore selesai menulis token sebelum navigasi
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Navigate to home
       router.replace('/');
     } catch (error: any) {
       Toast.show({
